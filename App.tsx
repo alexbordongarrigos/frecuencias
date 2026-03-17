@@ -206,29 +206,37 @@ const App: React.FC = () => {
       <div className="relative z-10 max-w-7xl mx-auto px-4 md:px-6 py-8">
         
         {/* --- Header --- */}
-        <header className="text-center mb-8 animate-fade-in">
-          <div className="inline-flex items-center gap-2 mb-6 px-4 py-1.5 rounded-full bg-white/5 border border-white/10 shadow-[0_0_15px_rgba(56,189,248,0.15)] backdrop-blur-sm">
-            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
-            <span className="text-[10px] font-bold uppercase tracking-[0.25em] text-cyan-200">Base de Datos V.7</span>
+        <header className="text-center mb-12 animate-fade-in flex flex-col items-center justify-center">
+          <div className="inline-flex items-center gap-3 mb-8 px-6 py-2 rounded-full bg-black/40 border border-cyan-500/30 shadow-[0_0_30px_rgba(34,211,238,0.2)] backdrop-blur-md hover:shadow-[0_0_50px_rgba(34,211,238,0.4)] transition-shadow duration-500 cursor-default">
+            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_10px_rgba(34,211,238,0.8)]"></span>
+            <span className="text-xs font-bold uppercase tracking-[0.3em] text-cyan-100 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]">Base de Datos V.7</span>
           </div>
-          <h1 className="font-display text-4xl md:text-6xl font-bold mb-4 tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-cyan-200 via-purple-200 to-pink-200">
-            Omni-Frecuencias
-          </h1>
+          
+          <div className="relative inline-block">
+              <h1 className="font-display text-5xl md:text-7xl font-black mb-6 tracking-tighter text-transparent bg-clip-text bg-gradient-to-br from-cyan-300 via-purple-300 to-pink-300 drop-shadow-[0_5px_15px_rgba(168,85,247,0.4)]" style={{ textShadow: '0 10px 30px rgba(168,85,247,0.3), 0 2px 10px rgba(34,211,238,0.5)' }}>
+                Omni-Frecuencias
+              </h1>
+              <div className="absolute -inset-4 bg-gradient-to-r from-cyan-500/20 via-purple-500/20 to-pink-500/20 blur-2xl -z-10 rounded-full opacity-50 mix-blend-screen"></div>
+          </div>
           
           {/* Main Navigation Tabs */}
-          <div className="flex justify-center mt-8 gap-4">
+          <div className="flex justify-center mt-10 gap-6">
              <button 
                 onClick={() => setViewMode('library')}
-                className={`flex items-center gap-2 px-6 py-3 rounded-xl font-display font-medium tracking-wide transition-all ${viewMode === 'library' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 shadow-lg shadow-cyan-500/10' : 'bg-white/5 text-slate-400 border border-white/10 hover:bg-white/10'}`}
+                className={`relative overflow-hidden group flex items-center gap-3 px-8 py-4 rounded-2xl font-display font-bold tracking-widest uppercase text-sm transition-all duration-500 ${viewMode === 'library' ? 'bg-cyan-950/40 text-cyan-200 border-2 border-cyan-400/50 shadow-[0_0_30px_rgba(34,211,238,0.4),inset_0_0_20px_rgba(34,211,238,0.2)] scale-105' : 'bg-black/40 text-slate-400 border-2 border-white/5 hover:bg-white/5 hover:border-cyan-500/30 hover:text-cyan-100 hover:shadow-[0_0_20px_rgba(34,211,238,0.2)]'}`}
              >
-                <Icon name="Search" size={18} />
+                <div className={`absolute inset-0 bg-gradient-to-r from-cyan-500/0 via-cyan-400/20 to-cyan-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 ${viewMode === 'library' ? 'animate-[shimmer_2s_infinite]' : ''}`}></div>
+                <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-white/10 to-transparent opacity-50 pointer-events-none"></div>
+                <Icon name="Search" size={20} className={viewMode === 'library' ? 'drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]' : ''} />
                 Biblioteca
              </button>
              <button 
                 onClick={() => setViewMode('generator')}
-                className={`flex items-center gap-2 px-6 py-3 rounded-xl font-display font-medium tracking-wide transition-all ${viewMode === 'generator' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/50 shadow-lg shadow-purple-500/10' : 'bg-white/5 text-slate-400 border border-white/10 hover:bg-white/10'}`}
+                className={`relative overflow-hidden group flex items-center gap-3 px-8 py-4 rounded-2xl font-display font-bold tracking-widest uppercase text-sm transition-all duration-500 ${viewMode === 'generator' ? 'bg-purple-950/40 text-purple-200 border-2 border-purple-400/50 shadow-[0_0_30px_rgba(168,85,247,0.4),inset_0_0_20px_rgba(168,85,247,0.2)] scale-105' : 'bg-black/40 text-slate-400 border-2 border-white/5 hover:bg-white/5 hover:border-purple-500/30 hover:text-purple-100 hover:shadow-[0_0_20px_rgba(168,85,247,0.2)]'}`}
              >
-                <Icon name="Zap" size={18} />
+                <div className={`absolute inset-0 bg-gradient-to-r from-purple-500/0 via-purple-400/20 to-purple-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 ${viewMode === 'generator' ? 'animate-[shimmer_2s_infinite]' : ''}`}></div>
+                <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-white/10 to-transparent opacity-50 pointer-events-none"></div>
+                <Icon name="Zap" size={20} className={viewMode === 'generator' ? 'drop-shadow-[0_0_8px_rgba(168,85,247,0.8)]' : ''} />
                 Generador
              </button>
           </div>
@@ -239,12 +247,14 @@ const App: React.FC = () => {
             <div className="animate-fade-in">
                 {/* --- Controls Panel --- */}
                 <div className="sticky top-4 z-40 mb-10" style={{ animationDelay: '100ms' }}>
-                <div className="bg-slate-900/70 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-4">
+                <div className="bg-black/60 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-[0_10px_40px_rgba(0,0,0,0.8),inset_0_0_20px_rgba(255,255,255,0.05)] p-5 relative overflow-hidden">
+                    <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 via-purple-500/5 to-pink-500/5 pointer-events-none"></div>
+                    <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent"></div>
                     
                     {/* Top Row: Search & Mobile Toggle */}
-                    <div className="flex flex-col md:flex-row gap-4 justify-between items-center mb-4 md:mb-2">
+                    <div className="flex flex-col md:flex-row gap-5 justify-between items-center mb-4 md:mb-3 relative z-10">
                     <div className="relative w-full md:w-96 group">
-                        <div className="absolute left-4 top-3.5 text-slate-500 group-focus-within:text-cyan-400 transition-colors">
+                        <div className="absolute left-4 top-3.5 text-slate-500 group-focus-within:text-cyan-400 transition-colors drop-shadow-[0_0_5px_rgba(34,211,238,0.5)]">
                         <Icon name="Search" size={18} />
                         </div>
                         <input 
@@ -252,13 +262,13 @@ const App: React.FC = () => {
                         placeholder="Buscar frecuencia, órgano, pirámide..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full bg-black/40 border border-white/10 rounded-xl pl-12 pr-4 py-3 text-sm focus:outline-none focus:border-cyan-500/50 focus:bg-black/60 transition-all text-white placeholder-slate-600"
+                        className="w-full bg-black/50 border border-white/10 rounded-2xl pl-12 pr-4 py-3 text-sm focus:outline-none focus:border-cyan-400/50 focus:bg-black/80 focus:shadow-[0_0_20px_rgba(34,211,238,0.2),inset_0_0_10px_rgba(34,211,238,0.1)] transition-all duration-300 text-white placeholder-slate-600 font-light"
                         />
                     </div>
 
                     {/* Sort Controls (Desktop) */}
-                    <div className="hidden md:flex items-center gap-2 bg-black/20 p-1 rounded-xl border border-white/5">
-                        <span className="text-[10px] uppercase text-slate-500 px-3 font-medium">Ordenar:</span>
+                    <div className="hidden md:flex items-center gap-2 bg-black/40 p-1.5 rounded-2xl border border-white/10 shadow-[inset_0_0_10px_rgba(0,0,0,0.5)]">
+                        <span className="text-[10px] uppercase tracking-widest text-slate-500 px-3 font-bold">Ordenar:</span>
                         {[
                         { label: 'Hz Asc', value: 'hz-asc' },
                         { label: 'Hz Desc', value: 'hz-desc' },
@@ -269,10 +279,10 @@ const App: React.FC = () => {
                             key={opt.value}
                             onClick={() => setSortOrder(opt.value as any)}
                             className={`
-                            px-3 py-1.5 rounded-lg text-xs font-medium transition-all
+                            px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-300
                             ${sortOrder === opt.value 
-                                ? 'bg-white/10 text-cyan-300 shadow-sm' 
-                                : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'}
+                                ? 'bg-cyan-950/50 text-cyan-300 border border-cyan-500/30 shadow-[0_0_15px_rgba(34,211,238,0.2)]' 
+                                : 'text-slate-500 border border-transparent hover:text-cyan-200 hover:bg-white/5'}
                             `}
                         >
                             {opt.label}
@@ -282,7 +292,7 @@ const App: React.FC = () => {
                     
                     {/* Mobile Filter Toggle */}
                     <button 
-                        className="md:hidden w-full py-2 bg-white/5 border border-white/10 rounded-lg text-xs uppercase tracking-widest text-slate-300"
+                        className="md:hidden w-full py-3 bg-black/50 border border-white/10 rounded-xl text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-200/70 hover:text-cyan-300 hover:border-cyan-500/30 transition-all shadow-[inset_0_0_10px_rgba(0,0,0,0.5)]"
                         onClick={() => setShowFilters(!showFilters)}
                     >
                         {showFilters ? 'Ocultar Filtros' : 'Mostrar Categorías y Orden'}
@@ -291,7 +301,7 @@ const App: React.FC = () => {
 
                     {/* Bottom Row: Categories */}
                     <div className={`
-                    ${showFilters ? 'flex' : 'hidden'} md:flex flex-col md:flex-row gap-4 items-start md:items-center border-t border-white/5 pt-4 md:pt-2 mt-2 md:mt-0
+                    ${showFilters ? 'flex' : 'hidden'} md:flex flex-col md:flex-row gap-5 items-start md:items-center border-t border-white/10 pt-5 md:pt-3 mt-3 md:mt-0 relative z-10
                     `}>
                     {/* Mobile Sort */}
                     <div className="md:hidden flex flex-wrap gap-2 w-full mb-4">
@@ -302,7 +312,7 @@ const App: React.FC = () => {
                         <button
                             key={opt.value}
                             onClick={() => setSortOrder(opt.value as any)}
-                            className={`flex-grow px-3 py-2 rounded-lg text-xs font-medium border border-white/10 ${sortOrder === opt.value ? 'bg-cyan-900/30 text-cyan-200 border-cyan-500/30' : 'bg-black/20 text-slate-400'}`}
+                            className={`flex-grow px-4 py-3 rounded-xl text-[10px] font-bold uppercase tracking-wider border transition-all duration-300 ${sortOrder === opt.value ? 'bg-cyan-950/50 text-cyan-300 border-cyan-500/30 shadow-[0_0_15px_rgba(34,211,238,0.2)]' : 'bg-black/40 text-slate-500 border-white/10 hover:bg-white/5'}`}
                         >
                             {opt.label}
                         </button>
@@ -315,13 +325,13 @@ const App: React.FC = () => {
                             key={cat.id}
                             onClick={() => setActiveCategory(cat.id)}
                             className={`
-                            flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium transition-all duration-300 border
+                            flex items-center gap-2 px-4 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all duration-300 border
                             ${activeCategory === cat.id 
-                                ? `bg-white/10 border-white/20 text-white shadow-[0_0_15px_rgba(255,255,255,0.1)]` 
-                                : 'bg-transparent border-transparent text-slate-500 hover:bg-white/5 hover:text-slate-300'}
+                                ? `bg-white/10 border-white/20 text-white shadow-[0_0_20px_rgba(255,255,255,0.15),inset_0_0_10px_rgba(255,255,255,0.05)] scale-105` 
+                                : 'bg-black/20 border-white/5 text-slate-500 hover:bg-white/10 hover:text-slate-300 hover:border-white/10'}
                             `}
                         >
-                            <Icon name={cat.iconName} size={14} className={activeCategory === cat.id ? cat.color : ''} />
+                            <Icon name={cat.iconName} size={14} className={activeCategory === cat.id ? `${cat.color} drop-shadow-[0_0_5px_currentColor]` : ''} />
                             {cat.label}
                         </button>
                         ))}

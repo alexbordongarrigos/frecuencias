@@ -18,29 +18,32 @@ const GlobalPlayer: React.FC<Props> = ({ audio }) => {
   return (
     <div className="fixed bottom-0 left-0 w-full z-50 animate-fade-in">
       <div className="max-w-7xl mx-auto px-4 pb-4">
-        <div className="bg-slate-900/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] p-3 md:p-4 flex items-center gap-4 md:gap-6">
+        <div className="bg-black/60 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-[0_-10px_50px_rgba(0,0,0,0.8)] p-4 md:p-5 flex items-center gap-5 md:gap-8 relative overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/10 via-purple-500/10 to-pink-500/10 pointer-events-none"></div>
+            <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent"></div>
             
             {/* Play/Pause Button */}
             <button 
                 onClick={toggleMasterPlay}
-                className={`flex-shrink-0 w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${isPlaying ? 'bg-cyan-500 text-black hover:bg-cyan-400 shadow-cyan-500/20' : 'bg-white/10 text-white hover:bg-white/20'}`}
+                className={`relative group flex-shrink-0 w-14 h-14 md:w-16 md:h-16 rounded-full flex items-center justify-center transition-all duration-500 shadow-[0_0_20px_rgba(0,0,0,0.5)] z-10 ${isPlaying ? 'bg-cyan-500 text-black border-2 border-cyan-300 shadow-[0_0_30px_rgba(34,211,238,0.6)] scale-105' : 'bg-black/50 text-cyan-400 border-2 border-cyan-500/30 hover:border-cyan-400 hover:bg-cyan-950/50 hover:shadow-[0_0_30px_rgba(34,211,238,0.3)]'}`}
             >
+                <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-white/0 via-white/20 to-white/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
                 {isPlaying ? (
-                    <div className="w-4 h-4 bg-current rounded-sm" /> 
+                    <div className="w-5 h-5 bg-current rounded-sm shadow-[0_0_10px_currentColor]" /> 
                 ) : (
-                    <Icon name="Radio" className="ml-1" />
+                    <Icon name="Radio" size={24} className="ml-1 drop-shadow-[0_0_8px_currentColor]" />
                 )}
             </button>
 
             {/* Info Area */}
-            <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                    <span className="text-xs uppercase tracking-widest text-cyan-400 font-bold">
+            <div className="flex-1 min-w-0 relative z-10">
+                <div className="flex items-center gap-3 mb-1.5">
+                    <span className={`text-[10px] md:text-xs uppercase tracking-[0.2em] font-black ${isPlaying ? 'text-cyan-300 drop-shadow-[0_0_5px_rgba(34,211,238,0.8)]' : 'text-slate-500'}`}>
                         {isPlaying ? 'Reproduciendo' : 'Pausado'}
                     </span>
-                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" style={{ opacity: isPlaying ? 1 : 0}}></span>
+                    <span className={`w-2 h-2 rounded-full ${isPlaying ? 'bg-cyan-400 animate-pulse shadow-[0_0_8px_rgba(34,211,238,1)]' : 'bg-slate-700'}`}></span>
                 </div>
-                <div className="text-sm text-white truncate font-light">
+                <div className="text-sm md:text-base text-white truncate font-display font-medium tracking-wide drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
                     {activeCount === 0 ? 'Silencio Total' : 
                      activeCount === 1 ? `${oscillators.find(o => o.isPlaying)?.name || 'Frecuencia'}` : 
                      `${activeCount} Frecuencias combinadas`}
@@ -48,16 +51,29 @@ const GlobalPlayer: React.FC<Props> = ({ audio }) => {
             </div>
 
             {/* Mini Visualizer */}
-            <div className="hidden md:block w-32 h-10 bg-black/50 rounded overflow-hidden border border-white/5 opacity-80">
-                <Visualizer analyser={getMasterAnalyser()} height={40} color={isPlaying ? '#a855f7' : '#475569'} />
+            <div className="hidden md:block w-40 h-12 bg-black/80 rounded-xl overflow-hidden border border-white/10 opacity-90 relative z-10 shadow-[inset_0_0_15px_rgba(0,0,0,0.8)]">
+                <Visualizer analyser={getMasterAnalyser()} height={48} color={isPlaying ? '#a855f7' : '#475569'} />
+                <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay pointer-events-none"></div>
             </div>
 
-             {/* Volume Indicator (Visual only for now) */}
-             <div className="hidden md:flex flex-col gap-1 w-20">
-                <div className="text-[10px] text-slate-500 uppercase text-right">Master</div>
-                <div className="h-1 bg-slate-700 rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-cyan-500 to-purple-500 w-1/2"></div>
+             {/* Volume Indicator */}
+             <div className="hidden md:flex flex-col gap-2 w-32 relative z-10 bg-black/40 p-2.5 rounded-xl border border-white/5">
+                <div className="text-[9px] text-cyan-200/70 uppercase font-bold tracking-widest text-right flex items-center justify-between">
+                    <Icon name="Volume2" size={10} className="text-cyan-500/50" />
+                    Master
                 </div>
+                <input 
+                    type="range" 
+                    min="0" 
+                    max="1" 
+                    step="0.01" 
+                    value={audio.masterVolume} 
+                    onChange={(e) => audio.updateMasterVolume(parseFloat(e.target.value))}
+                    className="w-full h-1.5 bg-slate-800 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-cyan-400 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-[0_0_10px_rgba(34,211,238,0.8)]"
+                    style={{
+                        background: `linear-gradient(to right, #06b6d4 ${audio.masterVolume * 100}%, #1e293b ${audio.masterVolume * 100}%)`
+                    }}
+                />
              </div>
         </div>
       </div>

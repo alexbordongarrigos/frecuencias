@@ -107,6 +107,16 @@ export const useFileSystem = () => {
   };
 
   const saveFile = (parentId: string, name: string, content: PresetContent) => {
+    const parentNode = findNode(parentId, root);
+    if (parentNode && parentNode.children) {
+      const existingFile = parentNode.children.find(c => c.type === 'file' && c.name === name);
+      if (existingFile) {
+        // Overwrite existing file
+        persist(updateTree(root, existingFile.id, (node) => ({ ...node, content, createdAt: Date.now() })));
+        return;
+      }
+    }
+
     const newFile: FileSystemNode = {
       id: crypto.randomUUID(),
       parentId,
@@ -150,15 +160,23 @@ export const useFileSystem = () => {
     }
 
     // Finally save file
-    const newFile: FileSystemNode = {
-        id: crypto.randomUUID(),
-        parentId: currentFolderId,
-        name: fileName,
-        type: 'file',
-        content,
-        createdAt: Date.now()
-    };
-    persist(addToFolder(currentTree, currentFolderId, newFile));
+    const folderNode = findNode(currentFolderId, currentTree);
+    const existingFile = folderNode?.children?.find(c => c.type === 'file' && c.name === fileName);
+    
+    if (existingFile) {
+      currentTree = updateTree(currentTree, existingFile.id, (node) => ({ ...node, content, createdAt: Date.now() }));
+    } else {
+      const newFile: FileSystemNode = {
+          id: crypto.randomUUID(),
+          parentId: currentFolderId,
+          name: fileName,
+          type: 'file',
+          content,
+          createdAt: Date.now()
+      };
+      currentTree = addToFolder(currentTree, currentFolderId, newFile);
+    }
+    persist(currentTree);
   };
 
   const deleteNode = (id: string) => {
@@ -169,25 +187,52 @@ export const useFileSystem = () => {
     persist(updateTree(root, id, (node) => ({ ...node, name: newName })));
   };
 
+  const regenerateIds = (node: FileSystemNode, parentId: string | null): FileSystemNode => {
+    const newId = crypto.randomUUID();
+    return {
+      ...node,
+      id: newId,
+      parentId,
+      children: node.children?.map(c => regenerateIds(c, newId))
+    };
+  };
+
   const importSystem = (jsonString: string) => {
     try {
         const importedRoot = JSON.parse(jsonString);
         // Basic validation
         if (importedRoot.id === 'root' && Array.isArray(importedRoot.children)) {
-            // Intelligent Merge: We keep our root ID, but if the imported root has children, we add them.
-            // If folder names collide, we rename imported ones.
-            let newRoot = { ...root };
             
-            importedRoot.children.forEach((importedNode: FileSystemNode) => {
-                // Check collision
-                const exists = newRoot.children?.find(c => c.name === importedNode.name && c.type === importedNode.type);
-                if (exists) {
-                    // Rename imported
-                    importedNode.name = `${importedNode.name} (Importado)`;
-                }
-                importedNode.parentId = 'root'; // Re-parent to our root
-                newRoot = addToFolder(newRoot, 'root', importedNode);
-            });
+            const mergeChildren = (existingChildren: FileSystemNode[], importedChildren: FileSystemNode[], parentId: string): FileSystemNode[] => {
+                const result = [...existingChildren];
+                
+                importedChildren.forEach(importedChild => {
+                  const existingIndex = result.findIndex(c => c.name === importedChild.name && c.type === importedChild.type);
+                  
+                  if (existingIndex >= 0) {
+                    if (importedChild.type === 'folder') {
+                      result[existingIndex] = {
+                        ...result[existingIndex],
+                        children: mergeChildren(result[existingIndex].children || [], importedChild.children || [], result[existingIndex].id)
+                      };
+                    } else {
+                      const newFile = regenerateIds(importedChild, parentId);
+                      newFile.name = `${newFile.name} (Importado)`;
+                      result.push(newFile);
+                    }
+                  } else {
+                    result.push(regenerateIds(importedChild, parentId));
+                  }
+                });
+                
+                return result;
+            };
+
+            const newRoot = {
+                ...root,
+                children: mergeChildren(root.children || [], importedRoot.children, 'root')
+            };
+            
             persist(newRoot);
             return true;
         }

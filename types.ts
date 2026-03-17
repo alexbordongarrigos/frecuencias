@@ -34,6 +34,27 @@ export const CATEGORIES: { id: CategoryId; label: string; iconName: string; colo
 
 export type WaveType = 'sine' | 'square' | 'sawtooth' | 'triangle';
 
+export interface TransitionVariant {
+  frequency: number;
+  volume: number;
+  panX: number;
+  panY: number;
+  panZ: number;
+  type: WaveType;
+}
+
+export interface TransitionState {
+  enabled: boolean;
+  start: TransitionVariant;
+  end: TransitionVariant;
+  duration: number; // in seconds
+  loopCount: number | 'infinite';
+  isPlaying: boolean;
+  progress: number; // 0 to 1
+  currentLoop: number;
+  direction: 'forward' | 'backward'; // For looping back and forth
+}
+
 export interface OscillatorState {
   id: string;
   frequency: number;
@@ -51,6 +72,9 @@ export interface OscillatorState {
   // Visualization & Routing
   isIndependent: boolean; // If true, routes directly to master (skipping combined bus) and visualizes separately
   color: string; // Hex color for the wave
+
+  // Transition / Envelope
+  transition?: TransitionState;
 }
 
 export interface AudioContextState {

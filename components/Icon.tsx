@@ -4,7 +4,7 @@ import {
   Layers, Pyramid, Activity, Orbit, Music, Brain, Zap, Search, 
   ChevronDown, ChevronUp, MapPin, Shield, Radio,
   Folder, FileText, Save, Download, Upload, Trash2, Plus, 
-  CornerUpLeft, MoreHorizontal, Edit2, X, Play
+  CornerUpLeft, CornerUpRight, MoreHorizontal, Edit2, X, Play
 } from 'lucide-react';
 
 export const icons = {
@@ -29,6 +29,7 @@ export const icons = {
   Trash2, 
   Plus,
   CornerUpLeft,
+  CornerUpRight,
   MoreHorizontal,
   Edit2,
   X,
