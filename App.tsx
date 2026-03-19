@@ -7,6 +7,7 @@ import Icon from './components/Icon';
 import { useAudio } from './hooks/useAudio';
 import Generator from './components/Generator';
 import GlobalPlayer from './components/GlobalPlayer';
+import LandingPage from './components/LandingPage';
 
 type ViewMode = 'library' | 'generator';
 
@@ -94,6 +95,12 @@ const getSynergyRecipe = (id: string): Partial<OscillatorState>[] | null => {
 };
 
 const App: React.FC = () => {
+  const [started, setStarted] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
+    }
+    return false;
+  });
   const [activeCategory, setActiveCategory] = useState<CategoryId>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOrder, setSortOrder] = useState<SortOption['value']>('hz-asc');
@@ -192,6 +199,10 @@ const App: React.FC = () => {
     return data;
   }, [activeCategory, searchQuery, sortOrder]);
 
+  if (!started) {
+    return <LandingPage onEnterWeb={() => setStarted(true)} />;
+  }
+
   return (
     <div className="min-h-screen relative overflow-x-hidden selection:bg-cyan-500/30 selection:text-cyan-100">
       
@@ -208,8 +219,9 @@ const App: React.FC = () => {
         {/* --- Header --- */}
         <header className="text-center mb-12 animate-fade-in flex flex-col items-center justify-center">
           <div className="inline-flex items-center gap-3 mb-8 px-6 py-2 rounded-full bg-black/40 border border-cyan-500/30 shadow-[0_0_30px_rgba(34,211,238,0.2)] backdrop-blur-md hover:shadow-[0_0_50px_rgba(34,211,238,0.4)] transition-shadow duration-500 cursor-default">
+            <Icon name="Globe" size={16} className="text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]" />
             <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_10px_rgba(34,211,238,0.8)]"></span>
-            <span className="text-xs font-bold uppercase tracking-[0.3em] text-cyan-100 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]">Base de Datos V.7</span>
+            <span className="text-xs font-bold uppercase tracking-[0.3em] text-cyan-100 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]">Versión Web V.7</span>
           </div>
           
           <div className="relative inline-block">

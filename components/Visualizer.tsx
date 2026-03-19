@@ -58,13 +58,38 @@ const Visualizer: React.FC<VisualizerProps> = ({
       const h = canvas.height;
       canvasCtx.clearRect(0, 0, w, h);
 
+      // First pass: find the maximum absolute amplitude across all sources to scale properly
+      let maxAmplitude = 1.0; // Minimum scale is 1.0
+      const sourceData: Float32Array[] = [];
+
+      activeSources.forEach((source, index) => {
+        if (!source.analyser) {
+          sourceData.push(new Float32Array(0));
+          return;
+        }
+        const bufferLength = source.analyser.frequencyBinCount;
+        const dataArray = new Float32Array(bufferLength);
+        source.analyser.getFloatTimeDomainData(dataArray);
+        sourceData.push(dataArray);
+
+        for (let i = 0; i < bufferLength; i++) {
+          const absVal = Math.abs(dataArray[i]);
+          if (absVal > maxAmplitude) {
+            maxAmplitude = absVal;
+          }
+        }
+      });
+
+      // Add a small margin (10%) to the max amplitude
+      maxAmplitude *= 1.1;
+
       // Draw each source
-      activeSources.forEach(source => {
+      activeSources.forEach((source, index) => {
         if (!source.analyser) return;
 
-        const bufferLength = source.analyser.frequencyBinCount;
-        const dataArray = new Uint8Array(bufferLength);
-        source.analyser.getByteTimeDomainData(dataArray);
+        const dataArray = sourceData[index];
+        const bufferLength = dataArray.length;
+        if (bufferLength === 0) return;
 
         canvasCtx.lineWidth = 2;
         canvasCtx.strokeStyle = source.color;
@@ -78,8 +103,10 @@ const Visualizer: React.FC<VisualizerProps> = ({
         let x = 0;
 
         for (let i = 0; i < bufferLength; i++) {
-          const v = dataArray[i] / 128.0;
-          const y = v * h / 2; // Center is h/2
+          // Normalize the value based on the maximum amplitude found
+          const normalizedValue = dataArray[i] / maxAmplitude;
+          // Map from [-1, 1] to [h, 0]
+          const y = (1 - normalizedValue) * (h / 2);
 
           if (i === 0) {
             canvasCtx.moveTo(x, y);
@@ -89,7 +116,6 @@ const Visualizer: React.FC<VisualizerProps> = ({
           x += sliceWidth;
         }
 
-        canvasCtx.lineTo(w, h / 2);
         canvasCtx.stroke();
       });
     };

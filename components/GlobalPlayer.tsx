@@ -51,22 +51,32 @@ const GlobalPlayer: React.FC<Props> = ({ audio }) => {
             </div>
 
             {/* Mini Visualizer */}
-            <div className="hidden md:block w-40 h-12 bg-black/80 rounded-xl overflow-hidden border border-white/10 opacity-90 relative z-10 shadow-[inset_0_0_15px_rgba(0,0,0,0.8)]">
-                <Visualizer analyser={getMasterAnalyser()} height={48} color={isPlaying ? '#a855f7' : '#475569'} />
+            <div className="hidden md:block flex-1 max-w-xs h-14 bg-black/50 rounded-2xl overflow-hidden border border-white/5 relative z-10 shadow-[inset_0_0_20px_rgba(0,0,0,0.8)]">
+                <div className="absolute inset-0 bg-gradient-to-t from-cyan-500/10 to-transparent pointer-events-none"></div>
+                <Visualizer analyser={getMasterAnalyser()} height={56} color={isPlaying ? '#22d3ee' : '#475569'} type="fill" />
                 <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay pointer-events-none"></div>
             </div>
 
              {/* Volume Indicator */}
-             <div className="hidden md:flex flex-col gap-2 w-32 relative z-10 bg-black/40 p-2.5 rounded-xl border border-white/5">
-                <div className="text-[9px] text-cyan-200/70 uppercase font-bold tracking-widest text-right flex items-center justify-between">
-                    <Icon name="Volume2" size={10} className="text-cyan-500/50" />
-                    Master
+             <div className="hidden md:flex flex-col gap-2 w-36 relative z-10 bg-black/40 p-2.5 rounded-xl border border-white/5 shadow-[inset_0_0_10px_rgba(0,0,0,0.5)]">
+                <div className="text-[9px] text-cyan-200/70 uppercase font-bold tracking-widest flex items-center justify-between">
+                    <Icon name="Volume2" size={12} className="text-cyan-500/50" />
+                    <div className="flex items-center gap-1 bg-black/60 px-2 py-0.5 rounded border border-white/5">
+                        <input 
+                            type="number" 
+                            step="any"
+                            value={Math.round(audio.masterVolume * 100)}
+                            onChange={(e) => audio.updateMasterVolume(parseFloat(e.target.value) / 100)}
+                            className="w-10 bg-transparent text-right text-cyan-300 font-mono focus:outline-none"
+                        />
+                        <span className="text-cyan-500/50">%</span>
+                    </div>
                 </div>
                 <input 
                     type="range" 
                     min="0" 
                     max="1" 
-                    step="0.01" 
+                    step="any" 
                     value={audio.masterVolume} 
                     onChange={(e) => audio.updateMasterVolume(parseFloat(e.target.value))}
                     className="w-full h-1.5 bg-slate-800 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-cyan-400 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-[0_0_10px_rgba(34,211,238,0.8)]"

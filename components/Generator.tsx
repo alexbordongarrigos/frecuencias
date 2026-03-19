@@ -164,39 +164,37 @@ const Generator: React.FC<Props> = ({ audio }) => {
          <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-purple-500/5 to-pink-500/5 pointer-events-none"></div>
          <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent"></div>
          
-         <div className="flex flex-wrap items-center justify-center gap-5 relative z-10">
+         <div className="flex flex-col sm:flex-row flex-wrap items-center justify-center gap-4 sm:gap-5 relative z-10 w-full">
             <button 
                 onClick={audio.toggleMasterPlay}
-                className={`group relative flex items-center justify-center w-16 h-16 rounded-2xl transition-all duration-500 border-2 shadow-[0_0_20px_rgba(0,0,0,0.5),inset_0_0_10px_rgba(255,255,255,0.1)] hover:-translate-y-1 ${audio.isPlaying ? 'bg-cyan-500 text-black border-cyan-300 shadow-[0_0_30px_rgba(34,211,238,0.6),inset_0_0_15px_rgba(255,255,255,0.5)] scale-105' : 'bg-black/80 text-cyan-400 border-cyan-500/50 hover:border-cyan-400 hover:bg-cyan-950/50 hover:shadow-[0_0_30px_rgba(34,211,238,0.4)]'}`}
+                className={`group relative overflow-hidden flex items-center justify-center w-full sm:w-16 h-16 rounded-2xl transition-all duration-500 border-2 shadow-[0_0_20px_rgba(0,0,0,0.5),inset_0_0_10px_rgba(255,255,255,0.1)] hover:-translate-y-1 ${audio.isPlaying ? 'bg-cyan-500 text-black border-cyan-300 shadow-[0_0_30px_rgba(34,211,238,0.6),inset_0_0_15px_rgba(0,0,0,0.2)] scale-105' : 'bg-black/80 text-cyan-400 border-cyan-500/50 hover:border-cyan-400 hover:bg-cyan-950/50 hover:shadow-[0_0_30px_rgba(34,211,238,0.4)]'}`}
                 title={audio.isPlaying ? "Pausar Todo" : "Reproducir Todo"}
             >
-                <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent opacity-50 pointer-events-none rounded-2xl"></div>
                 <Icon name={audio.isPlaying ? 'Pause' : 'Play'} size={32} className={audio.isPlaying ? '' : 'ml-1'} />
+                <span className="sm:hidden ml-3 font-bold uppercase tracking-widest">{audio.isPlaying ? "Pausar Todo" : "Reproducir Todo"}</span>
             </button>
 
             <button 
                 onClick={() => { setExplorerMode('save'); setShowExplorer(true); }}
-                className="group relative flex items-center gap-3 px-8 py-4 bg-cyan-950/40 hover:bg-cyan-900/60 text-cyan-200 rounded-2xl text-sm font-bold uppercase tracking-widest transition-all duration-500 border-2 border-cyan-500/30 shadow-[0_0_20px_rgba(34,211,238,0.1),inset_0_0_10px_rgba(34,211,238,0.1)] hover:shadow-[0_0_30px_rgba(34,211,238,0.3),inset_0_0_15px_rgba(34,211,238,0.2)] hover:-translate-y-1 hover:border-cyan-400/50"
+                className="group relative overflow-hidden flex items-center justify-center gap-3 px-8 py-4 w-full sm:w-auto bg-cyan-950/40 hover:bg-cyan-900/60 text-cyan-200 rounded-2xl text-sm font-bold uppercase tracking-widest transition-all duration-500 border-2 border-cyan-500/30 shadow-[0_0_20px_rgba(34,211,238,0.1),inset_0_0_10px_rgba(34,211,238,0.1)] hover:shadow-[0_0_30px_rgba(34,211,238,0.3),inset_0_0_15px_rgba(34,211,238,0.2)] hover:-translate-y-1 hover:border-cyan-400/50"
             >
                 <div className="absolute inset-0 bg-gradient-to-r from-cyan-400/0 via-cyan-400/10 to-cyan-400/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 rounded-2xl"></div>
-                <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-white/10 to-transparent opacity-50 pointer-events-none rounded-t-2xl"></div>
                 <Icon name="Save" size={20} className="drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]" /> 
-                <span>Guardar Preset</span>
+                <span className="whitespace-nowrap">Guardar Preset</span>
             </button>
             <button 
                 onClick={() => { setExplorerMode('load'); setShowExplorer(true); }}
-                className="group relative flex items-center gap-3 px-8 py-4 bg-purple-950/40 hover:bg-purple-900/60 text-purple-200 rounded-2xl text-sm font-bold uppercase tracking-widest transition-all duration-500 border-2 border-purple-500/30 shadow-[0_0_20px_rgba(168,85,247,0.1),inset_0_0_10px_rgba(168,85,247,0.1)] hover:shadow-[0_0_30px_rgba(168,85,247,0.3),inset_0_0_15px_rgba(168,85,247,0.2)] hover:-translate-y-1 hover:border-purple-400/50"
+                className="group relative overflow-hidden flex items-center justify-center gap-3 px-8 py-4 w-full sm:w-auto bg-purple-950/40 hover:bg-purple-900/60 text-purple-200 rounded-2xl text-sm font-bold uppercase tracking-widest transition-all duration-500 border-2 border-purple-500/30 shadow-[0_0_20px_rgba(168,85,247,0.1),inset_0_0_10px_rgba(168,85,247,0.1)] hover:shadow-[0_0_30px_rgba(168,85,247,0.3),inset_0_0_15px_rgba(168,85,247,0.2)] hover:-translate-y-1 hover:border-purple-400/50"
             >
                 <div className="absolute inset-0 bg-gradient-to-r from-purple-400/0 via-purple-400/10 to-purple-400/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 rounded-2xl"></div>
-                <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-white/10 to-transparent opacity-50 pointer-events-none rounded-t-2xl"></div>
                 <Icon name="Folder" size={20} className="drop-shadow-[0_0_8px_rgba(168,85,247,0.8)]" /> 
-                <span>Cargar Preset</span>
+                <span className="whitespace-nowrap">Cargar Preset</span>
             </button>
          </div>
 
          <div className="flex items-center justify-center gap-6 pt-5 border-t border-white/10 w-full max-w-md relative z-10">
-             <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 hover:text-cyan-300 hover:bg-cyan-500/10 rounded-xl transition-colors border border-transparent hover:border-cyan-500/20 shadow-[inset_0_0_10px_rgba(0,0,0,0.5)]" title="Exportar Backup">
-                 <Icon name="Download" size={14} className="text-cyan-500/70" /> Exportar
+             <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 hover:text-cyan-300 hover:bg-cyan-500/10 rounded-xl transition-colors border border-transparent hover:border-cyan-500/20 shadow-[inset_0_0_10px_rgba(0,0,0,0.5)]" title="Exportar Backup v.7">
+                 <Icon name="Download" size={14} className="text-cyan-500/70" /> Exportar v.7
              </button>
              <label className="flex items-center gap-2 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 hover:text-purple-300 hover:bg-purple-500/10 rounded-xl cursor-pointer transition-colors border border-transparent hover:border-purple-500/20 shadow-[inset_0_0_10px_rgba(0,0,0,0.5)]" title="Importar Backup">
                  <Icon name="Upload" size={14} className="text-purple-500/70" /> Importar

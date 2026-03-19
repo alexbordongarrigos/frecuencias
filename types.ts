@@ -69,6 +69,10 @@ export interface OscillatorState {
   isPlaying: boolean;
   name?: string;
 
+  // Crossfade for wave types
+  type2?: WaveType;
+  typeMix?: number; // 0 to 1 (0 = type, 1 = type2)
+
   // Visualization & Routing
   isIndependent: boolean; // If true, routes directly to master (skipping combined bus) and visualizes separately
   color: string; // Hex color for the wave

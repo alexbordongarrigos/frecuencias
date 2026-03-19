@@ -1,5 +1,6 @@
 
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { FileSystemNode, PresetContent } from '../types';
 import { useFileSystem } from '../hooks/useFileSystem';
 import Icon from './Icon';
@@ -56,14 +57,14 @@ const FileExplorer: React.FC<Props> = ({ mode, onFileSelect, onClose, fs, curren
     return a.type === 'folder' ? -1 : 1;
   });
 
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in">
-      <div className="w-full max-w-4xl bg-black/80 border border-white/10 rounded-3xl shadow-[0_10px_50px_rgba(0,0,0,0.9),inset_0_0_30px_rgba(255,255,255,0.05)] flex flex-col h-[85vh] overflow-hidden relative">
-        <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 via-purple-500/5 to-pink-500/5 pointer-events-none"></div>
-        <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent"></div>
+  return createPortal(
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/90 backdrop-blur-xl p-4 sm:p-6 animate-fade-in">
+      <div className="w-full max-w-5xl bg-black/60 border border-cyan-500/20 rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.9),inset_0_0_30px_rgba(34,211,238,0.05)] flex flex-col h-[90vh] sm:h-[85vh] overflow-hidden relative backdrop-blur-2xl">
+        <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-purple-500/5 to-pink-500/10 pointer-events-none"></div>
+        <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent"></div>
         
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-white/10 bg-gradient-to-r from-black/60 to-black/40 relative z-10">
+        <div className="flex items-center justify-between p-6 border-b border-white/10 bg-black/40 relative z-10">
           <div className="flex items-center gap-4">
             <div className={`p-3 rounded-2xl border ${mode === 'save' ? 'bg-cyan-950/40 border-cyan-500/30 text-cyan-400 shadow-[inset_0_0_15px_rgba(34,211,238,0.2)]' : 'bg-purple-950/40 border-purple-500/30 text-purple-400 shadow-[inset_0_0_15px_rgba(168,85,247,0.2)]'}`}>
                <Icon name={mode === 'save' ? 'Save' : 'Folder'} size={28} className="drop-shadow-[0_0_8px_currentColor]" />
@@ -132,7 +133,7 @@ const FileExplorer: React.FC<Props> = ({ mode, onFileSelect, onClose, fs, curren
         )}
 
         {/* Grid Content */}
-        <div className="flex-1 overflow-y-auto p-6 bg-black/40 relative z-0">
+        <div className="flex-1 overflow-y-auto p-6 bg-transparent relative z-0 custom-scrollbar">
            {sortedChildren.length === 0 ? (
              <div className="h-full flex flex-col items-center justify-center text-slate-600">
                <div className="p-6 rounded-full bg-white/5 border border-white/10 mb-6 shadow-[inset_0_0_20px_rgba(255,255,255,0.02)]">
@@ -234,19 +235,19 @@ const FileExplorer: React.FC<Props> = ({ mode, onFileSelect, onClose, fs, curren
 
         {/* Footer Actions */}
         <div className="p-6 border-t border-white/10 bg-black/60 backdrop-blur-xl flex flex-col md:flex-row gap-6 items-center justify-between relative z-10 shadow-[0_-10px_30px_rgba(0,0,0,0.5)]">
-           <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
+           <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 hidden sm:block">
              {selectedId ? 'Elemento seleccionado' : 'Selecciona un archivo o carpeta'}
            </div>
 
-           <div className="flex gap-4 w-full md:w-auto">
+           <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
              {mode === 'save' && (
-               <div className="flex-1 md:w-72 relative">
+               <div className="flex-1 sm:w-72 relative">
                   <input 
                     type="text" 
                     placeholder="Nombre del archivo..."
                     value={saveFileName}
                     onChange={(e) => setSaveFileName(e.target.value)}
-                    className="w-full bg-black/40 border border-cyan-500/30 rounded-xl pl-4 pr-12 py-3 text-sm text-white focus:border-cyan-400 focus:shadow-[0_0_15px_rgba(34,211,238,0.2)] focus:outline-none transition-all placeholder:text-slate-600"
+                    className="w-full bg-black/60 border border-cyan-500/50 rounded-xl pl-4 pr-12 py-3 text-sm text-white focus:border-cyan-400 focus:shadow-[0_0_15px_rgba(34,211,238,0.4)] focus:outline-none transition-all placeholder:text-slate-500"
                   />
                   <div className="absolute right-4 top-3.5 text-cyan-500/50 pointer-events-none text-xs font-bold font-mono">.json</div>
                </div>
@@ -265,7 +266,7 @@ const FileExplorer: React.FC<Props> = ({ mode, onFileSelect, onClose, fs, curren
                     }}
                     disabled={!selectedId}
                     className={`
-                      px-8 py-3 rounded-xl font-bold uppercase tracking-widest text-xs transition-all duration-300 border
+                      w-full sm:w-auto px-8 py-3 rounded-xl font-bold uppercase tracking-widest text-xs transition-all duration-300 border
                       ${selectedId 
                         ? 'bg-purple-950/40 text-purple-200 border-purple-500/50 hover:bg-purple-900/60 hover:border-purple-400 hover:shadow-[0_0_20px_rgba(168,85,247,0.4),inset_0_0_10px_rgba(168,85,247,0.2)] hover:-translate-y-0.5' 
                         : 'bg-white/5 text-slate-500 border-white/10 cursor-not-allowed'}
@@ -288,7 +289,7 @@ const FileExplorer: React.FC<Props> = ({ mode, onFileSelect, onClose, fs, curren
                 }}
                 disabled={mode === 'save' ? !saveFileName : !selectedId}
                 className={`
-                  px-8 py-3 rounded-xl font-bold uppercase tracking-widest text-xs transition-all duration-300 border
+                  w-full sm:w-auto px-8 py-3 rounded-xl font-bold uppercase tracking-widest text-xs transition-all duration-300 border
                   ${(mode === 'save' ? saveFileName : selectedId) 
                     ? 'bg-cyan-950/40 text-cyan-200 border-cyan-500/50 hover:bg-cyan-900/60 hover:border-cyan-400 hover:shadow-[0_0_20px_rgba(34,211,238,0.4),inset_0_0_10px_rgba(34,211,238,0.2)] hover:-translate-y-0.5' 
                     : 'bg-white/5 text-slate-500 border-white/10 cursor-not-allowed'}
@@ -300,7 +301,8 @@ const FileExplorer: React.FC<Props> = ({ mode, onFileSelect, onClose, fs, curren
         </div>
 
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

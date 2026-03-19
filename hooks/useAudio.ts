@@ -3,8 +3,11 @@ import { useRef, useState, useEffect } from 'react';
 import { OscillatorState } from '../types';
 
 interface AudioNodeRefs {
-  osc: OscillatorNode;
-  gain: GainNode;
+  osc1: OscillatorNode;
+  osc2: OscillatorNode;
+  gain1: GainNode;
+  gain2: GainNode;
+  mainGain: GainNode;
   panner: PannerNode;
   analyser: AnalyserNode;
 }
@@ -26,7 +29,7 @@ export const useAudio = () => {
   
   const [isPlaying, setIsPlaying] = useState(false);
   const [oscillators, setOscillators] = useState<OscillatorState[]>([]);
-  const [masterVolume, setMasterVolume] = useState(0.5);
+  const [masterVolume, setMasterVolume] = useState(1.0);
 
   // Initialize Audio Context
   const initAudio = () => {
@@ -167,8 +170,11 @@ export const useAudio = () => {
     if (!audioCtxRef.current || !masterGainRef.current || !combinedGainRef.current) return;
     const ctx = audioCtxRef.current;
 
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
+    const osc1 = ctx.createOscillator();
+    const osc2 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    const gain2 = ctx.createGain();
+    const mainGain = ctx.createGain();
     
     // PannerNode: Equal Power for Hard Panning capability
     const panner = ctx.createPanner();
@@ -181,9 +187,17 @@ export const useAudio = () => {
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 512; 
 
-    osc.type = oscState.type;
-    osc.frequency.setValueAtTime(oscState.frequency, ctx.currentTime);
-    gain.gain.setValueAtTime(oscState.volume, ctx.currentTime);
+    osc1.type = oscState.type;
+    osc2.type = oscState.type2 || oscState.type;
+    
+    osc1.frequency.setValueAtTime(oscState.frequency, ctx.currentTime);
+    osc2.frequency.setValueAtTime(oscState.frequency, ctx.currentTime);
+    
+    const mix = oscState.typeMix || 0;
+    gain1.gain.setValueAtTime(1 - mix, ctx.currentTime);
+    gain2.gain.setValueAtTime(mix, ctx.currentTime);
+    
+    mainGain.gain.setValueAtTime(oscState.volume, ctx.currentTime);
     
     // Set 3D Position
     if (panner.positionX) {
@@ -193,8 +207,11 @@ export const useAudio = () => {
     }
 
     // Graph Connection
-    osc.connect(gain);
-    gain.connect(panner);
+    osc1.connect(gain1);
+    osc2.connect(gain2);
+    gain1.connect(mainGain);
+    gain2.connect(mainGain);
+    mainGain.connect(panner);
     panner.connect(analyser);
 
     // Routing Logic: Independent vs Combined
@@ -204,9 +221,10 @@ export const useAudio = () => {
         analyser.connect(combinedGainRef.current); // To Combined Bus
     }
 
-    osc.start();
+    osc1.start();
+    osc2.start();
 
-    nodesRef.current.set(oscState.id, { osc, gain, panner, analyser });
+    nodesRef.current.set(oscState.id, { osc1, osc2, gain1, gain2, mainGain, panner, analyser });
   };
 
   const destroyOscillatorNodes = (id: string) => {
@@ -214,12 +232,16 @@ export const useAudio = () => {
     if (nodes) {
       try {
           if (audioCtxRef.current) {
-            nodes.gain.gain.setTargetAtTime(0, audioCtxRef.current.currentTime, 0.01);
+            nodes.mainGain.gain.setTargetAtTime(0, audioCtxRef.current.currentTime, 0.01);
           }
           setTimeout(() => {
-              nodes.osc.stop();
-              nodes.osc.disconnect();
-              nodes.gain.disconnect();
+              nodes.osc1.stop();
+              nodes.osc2.stop();
+              nodes.osc1.disconnect();
+              nodes.osc2.disconnect();
+              nodes.gain1.disconnect();
+              nodes.gain2.disconnect();
+              nodes.mainGain.disconnect();
               nodes.panner.disconnect();
               nodes.analyser.disconnect();
           }, 50);
@@ -236,21 +258,27 @@ export const useAudio = () => {
     const now = ctx.currentTime;
 
     // Type
-    if (nodes.osc.type !== oscState.type) nodes.osc.type = oscState.type;
+    if (nodes.osc1.type !== oscState.type) nodes.osc1.type = oscState.type;
+    if (nodes.osc2.type !== (oscState.type2 || oscState.type)) nodes.osc2.type = oscState.type2 || oscState.type;
     
+    // Crossfade Mix (Equal Power)
+    const mix = oscState.typeMix || 0;
+    const gain1Value = Math.cos(mix * 0.5 * Math.PI);
+    const gain2Value = Math.sin(mix * 0.5 * Math.PI);
+    
+    nodes.gain1.gain.setTargetAtTime(gain1Value, now, 0.02);
+    nodes.gain2.gain.setTargetAtTime(gain2Value, now, 0.02);
+
     // Freq & Vol
-    nodes.osc.frequency.cancelScheduledValues(now);
-    nodes.osc.frequency.setTargetAtTime(oscState.frequency, now, 0.02);
-    nodes.gain.gain.cancelScheduledValues(now);
-    nodes.gain.gain.setTargetAtTime(oscState.isPlaying ? oscState.volume : 0, now, 0.02);
+    nodes.osc1.frequency.setTargetAtTime(oscState.frequency, now, 0.02);
+    nodes.osc2.frequency.setTargetAtTime(oscState.frequency, now, 0.02);
+    
+    nodes.mainGain.gain.setTargetAtTime(oscState.isPlaying ? oscState.volume : 0, now, 0.02);
     
     // 3D Position
     if (nodes.panner.positionX) {
-      nodes.panner.positionX.cancelScheduledValues(now);
       nodes.panner.positionX.setTargetAtTime(oscState.panX * SPATIAL_SCALE, now, 0.02);
-      nodes.panner.positionY.cancelScheduledValues(now);
       nodes.panner.positionY.setTargetAtTime(oscState.panY * SPATIAL_SCALE, now, 0.02);
-      nodes.panner.positionZ.cancelScheduledValues(now);
       nodes.panner.positionZ.setTargetAtTime(oscState.panZ * -SPATIAL_SCALE, now, 0.02);
     }
 
@@ -345,7 +373,6 @@ export const useAudio = () => {
           ) {
             hasChanges = true;
             
-            const type = newProgress < 0.5 ? t.start.type : t.end.type;
             const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
             
             const updatedOsc = {
@@ -355,7 +382,9 @@ export const useAudio = () => {
               panX: lerp(t.start.panX, t.end.panX, newProgress),
               panY: lerp(t.start.panY, t.end.panY, newProgress),
               panZ: lerp(t.start.panZ, t.end.panZ, newProgress),
-              type,
+              type: t.start.type,
+              type2: t.end.type,
+              typeMix: newProgress,
               transition: {
                 ...t,
                 progress: newProgress,
