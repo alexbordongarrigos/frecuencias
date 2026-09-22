@@ -17,6 +17,8 @@ import Introduction from './components/Introduction';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { LiveSession, PresetContent } from './types';
 import { getCurrentStarseedUser, StarseedUser, fetchLiveSessionById } from './services/starseedAuth';
+import { useScreenWakeLock } from './hooks/useScreenWakeLock';
+import { autoUpdateService, AppReleaseInfo } from './services/autoUpdateService';
 
 export interface SessionPermissions {
   canEditFrequencies: boolean;
@@ -146,6 +148,13 @@ const App: React.FC = () => {
   // Audio Engine Hook
   const audio = useAudio();
 
+  // Universal Screen Wake Lock (keeps display active across all OSs)
+  useScreenWakeLock(true);
+
+  // Auto Updates State
+  const [availableUpdate, setAvailableUpdate] = useState<AppReleaseInfo | null>(null);
+  const [showDownloadCenter, setShowDownloadCenter] = useState(false);
+
   // Session State
   const [activeSession, setActiveSession] = useState<LiveSession | null>(null);
   const [sessionPermissions, setSessionPermissions] = useState<SessionPermissions>({
@@ -162,6 +171,13 @@ const App: React.FC = () => {
   React.useEffect(() => {
     getCurrentStarseedUser().then(user => setCurrentUser(user));
     
+    // Subscribe to auto-updates check
+    const unsubUpdate = autoUpdateService.subscribe((info) => {
+      if (info && info.hasUpdate) {
+        setAvailableUpdate(info);
+      }
+    });
+
     // Check for session invite link
     const searchParams = new URLSearchParams(window.location.search);
     const sessionId = searchParams.get('session');
@@ -179,6 +195,10 @@ const App: React.FC = () => {
        // Clear the URL so we don't keep rejoining on refresh
        window.history.replaceState({}, document.title, window.location.pathname);
     }
+
+    return () => {
+      unsubUpdate();
+    };
   }, []);
 
   // Handler to add from Library to Generator
@@ -270,14 +290,44 @@ const App: React.FC = () => {
     return data;
   }, [activeCategory, searchQuery, sortOrder]);
 
-  if (!started) {
-    return <LandingPage onEnterWeb={() => setStarted(true)} />;
+  if (!started || showDownloadCenter) {
+    return <LandingPage onEnterWeb={() => { setStarted(true); setShowDownloadCenter(false); }} onClose={() => setShowDownloadCenter(false)} />;
   }
 
   return (
     <ErrorBoundary>
     <div className="min-h-screen relative overflow-x-hidden selection:bg-cyan-500/30 selection:text-cyan-100">
       
+      {/* --- In-App Auto Update Banner --- */}
+      {availableUpdate && availableUpdate.hasUpdate && (
+        <div className="sticky top-0 z-[120] bg-gradient-to-r from-purple-900/95 via-fuchsia-900/95 to-purple-900/95 backdrop-blur-2xl border-b border-fuchsia-400/50 p-2.5 px-4 shadow-[0_5px_30px_rgba(192,38,211,0.6)] flex items-center justify-between text-xs animate-fade-in">
+          <div className="flex items-center gap-3">
+            <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping"></span>
+            <span className="font-bold text-white uppercase tracking-wider">
+              ¡Actualización {availableUpdate.latestVersion} disponible!
+            </span>
+            <span className="hidden md:inline text-purple-200 text-[11px] truncate max-w-md">
+              {availableUpdate.releaseName}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button 
+              onClick={() => autoUpdateService.applyUpdate()}
+              className="px-4 py-1.5 bg-cyan-400 hover:bg-cyan-300 text-black font-black uppercase text-[10px] tracking-widest rounded-xl transition-all shadow-[0_0_15px_rgba(34,211,238,0.5)] cursor-pointer"
+            >
+              Actualizar
+            </button>
+            <button 
+              onClick={() => setAvailableUpdate(null)}
+              className="text-purple-300 hover:text-white p-1 rounded hover:bg-white/10"
+              title="Cerrar aviso"
+            >
+              <Icon name="X" size={14} />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* --- Ambient Background --- */}
       <div className="fixed inset-0 z-0 pointer-events-none">
         <div className="absolute top-0 left-1/4 w-96 h-96 bg-purple-600/20 rounded-full mix-blend-screen filter blur-[100px] animate-blob"></div>
@@ -290,10 +340,21 @@ const App: React.FC = () => {
         
         {/* --- Header --- */}
         <header className="text-center mb-12 animate-fade-in flex flex-col items-center justify-center">
-          <div className="inline-flex items-center gap-3 mb-8 px-6 py-2 rounded-full bg-black/40 border border-cyan-500/30 shadow-[0_0_30px_rgba(34,211,238,0.2)] backdrop-blur-md hover:shadow-[0_0_50px_rgba(34,211,238,0.4)] transition-shadow duration-500 cursor-default">
-            <Icon name="Globe" size={16} className="text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]" />
-            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_10px_rgba(34,211,238,0.8)]"></span>
-            <span className="text-xs font-bold uppercase tracking-[0.3em] text-cyan-100 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]">Versión Web V.7</span>
+          <div className="flex flex-wrap items-center justify-center gap-3 mb-8">
+            <div className="inline-flex items-center gap-3 px-6 py-2 rounded-full bg-black/40 border border-cyan-500/30 shadow-[0_0_30px_rgba(34,211,238,0.2)] backdrop-blur-md">
+              <Icon name="Globe" size={16} className="text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]" />
+              <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_10px_rgba(34,211,238,0.8)]"></span>
+              <span className="text-xs font-bold uppercase tracking-[0.3em] text-cyan-100 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]">Versión Web V.7</span>
+            </div>
+
+            <button
+              onClick={() => setShowDownloadCenter(true)}
+              className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-purple-950/40 hover:bg-purple-900/60 border border-purple-500/40 hover:border-purple-400 text-xs font-bold uppercase tracking-wider text-purple-200 hover:text-white transition-all shadow-[0_0_20px_rgba(168,85,247,0.2)] cursor-pointer"
+              title="Descargar versión nativa para tu dispositivo"
+            >
+              <Icon name="Download" size={14} className="text-purple-400 animate-bounce" />
+              <span>Instalar Apps SO</span>
+            </button>
           </div>
           
           <div className="relative inline-block mt-4">

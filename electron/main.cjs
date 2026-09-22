@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog } = require('electron');
+const { app, BrowserWindow, dialog, powerSaveBlocker } = require('electron');
 const path = require('path');
 const { autoUpdater } = require('electron-updater');
 const isDev = !app.isPackaged;
@@ -34,6 +34,9 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  // Mantener la pantalla del monitor encendida permanentemente en escritorio
+  powerSaveBlocker.start('prevent-display-sleep');
+
   const win = createWindow();
 
   // Set up auto updater

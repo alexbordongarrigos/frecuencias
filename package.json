@@ -1,7 +1,9 @@
 {
   "name": "omni-frecuencias-holograficas",
   "private": true,
-  "version": "0.0.0",
+  "version": "2.0.0",
+  "description": "Omni-Frecuencias Holográficas - Generador Holográfico y Red Mesh Multi-Medio",
+  "author": "Alex Bordon Garrigos",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
@@ -26,8 +28,28 @@
     "mac": {
       "icon": "icon.icns",
       "target": [
-        "dmg"
+        "dmg",
+        "zip"
       ]
+    },
+    "win": {
+      "icon": "icon.png",
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "linux": {
+      "icon": "icon.png",
+      "target": [
+        "AppImage",
+        "deb"
+      ]
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "alexbordongarrigos",
+      "repo": "omnifrecuencias"
     }
   },
   "dependencies": {

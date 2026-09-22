@@ -19,9 +19,12 @@ const GlobalPlayer: React.FC<Props> = ({ audio }) => {
   return (
     <div className="fixed bottom-0 left-0 w-full z-50 animate-fade-in">
       <div className="max-w-7xl mx-auto px-4 pb-4">
-        <div className="bg-black/60 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-[0_-10px_50px_rgba(0,0,0,0.8)] p-4 md:p-5 flex items-center gap-5 md:gap-8 relative overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/10 via-purple-500/10 to-pink-500/10 pointer-events-none"></div>
-            <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent"></div>
+        <div className="bg-black/80 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-[0_-10px_50px_rgba(0,0,0,0.8)] p-4 md:p-5 flex items-center gap-4 sm:gap-5 md:gap-8 relative">
+            {/* Background decorative glow (isolated with overflow-hidden) */}
+            <div className="absolute inset-0 rounded-3xl overflow-hidden pointer-events-none">
+              <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/10 via-purple-500/10 to-pink-500/10"></div>
+              <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent"></div>
+            </div>
             
             {/* Play/Pause Button */}
             <button 
@@ -55,73 +58,100 @@ const GlobalPlayer: React.FC<Props> = ({ audio }) => {
             <div className="hidden md:block flex-1 max-w-xs h-14 bg-black/50 rounded-2xl overflow-hidden border border-white/5 relative z-10 shadow-[inset_0_0_20px_rgba(0,0,0,0.8)]">
                 <div className="absolute inset-0 bg-gradient-to-t from-cyan-500/10 to-transparent pointer-events-none"></div>
                 <Visualizer analyser={getMasterAnalyser()} height={56} color={isPlaying ? '#22d3ee' : '#475569'} type="fill" />
-                <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay pointer-events-none"></div>
+                <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-20 mix-blend-overlay pointer-events-none"></div>
             </div>
 
-            {/* Filter Toggle */}
-            <div className="relative z-10">
+            {/* Filter & Master Adjustments Toggle */}
+            <div className="relative z-20">
                <button 
                  onClick={() => setShowFilter(!showFilter)}
-                 className={`p-2 rounded-xl transition-all border ${showFilter ? 'bg-fuchsia-500/20 border-fuchsia-500/50 text-fuchsia-300' : 'bg-white/5 border-white/10 text-slate-400 hover:text-white'}`}
-                 title="Filtro de Resonancia"
+                 className={`p-2.5 sm:p-3 rounded-2xl transition-all border flex items-center gap-1.5 shadow-lg ${showFilter ? 'bg-fuchsia-500/30 border-fuchsia-400 text-fuchsia-200 shadow-[0_0_20px_rgba(192,38,211,0.4)] scale-105' : 'bg-white/5 border-white/10 text-slate-300 hover:text-white hover:bg-white/10 hover:border-cyan-500/30'}`}
+                 title="Ajustes de Filtro y Resonancia Master"
                >
-                 <Icon name="Sliders" size={16} />
+                 <Icon name="Sliders" size={18} className="drop-shadow-[0_0_5px_currentColor]" />
+                 <span className="hidden sm:inline text-[10px] font-bold uppercase tracking-wider">Ajustes</span>
                </button>
 
                {showFilter && (
-                 <div className="absolute bottom-full mb-4 right-0 md:-left-10 w-64 bg-black/90 backdrop-blur-xl border border-fuchsia-500/30 rounded-2xl p-4 shadow-[0_10px_40px_rgba(192,38,211,0.2)] animate-fade-in">
-                   <div className="flex items-center justify-between mb-3">
-                     <span className="text-xs font-bold text-fuchsia-400 uppercase tracking-wider flex items-center gap-2">
-                       <Icon name="Activity" size={14} /> Filtro Personal
-                     </span>
-                     <button onClick={() => setShowFilter(false)} className="text-slate-400 hover:text-white">
-                       <Icon name="X" size={14} />
-                     </button>
-                   </div>
-                   
-                   <div className="space-y-4">
-                     <div>
-                       <label className="text-[10px] text-slate-400 font-bold mb-1 block">TIPO DE FILTRO</label>
-                       <select 
-                         value={masterFilter.type}
-                         onChange={(e) => updateMasterFilter({ type: e.target.value as any })}
-                         className="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-fuchsia-500"
+                 <>
+                   {/* Backdrop dismiss */}
+                   <div 
+                     className="fixed inset-0 z-[90] bg-black/50 backdrop-blur-xs"
+                     onClick={() => setShowFilter(false)}
+                   />
+
+                   {/* Floating Settings Popover above bottom bar */}
+                   <div className="absolute bottom-full mb-4 right-0 sm:right-auto sm:left-1/2 sm:-translate-x-1/2 w-[calc(100vw-2rem)] max-w-xs sm:w-80 bg-[#070b16]/95 backdrop-blur-2xl border border-fuchsia-500/40 rounded-3xl p-5 shadow-[0_10px_50px_rgba(0,0,0,0.9),0_0_30px_rgba(192,38,211,0.25)] animate-fade-in z-[100]">
+                     <div className="flex items-center justify-between mb-4 border-b border-white/10 pb-3">
+                       <span className="text-xs font-bold text-fuchsia-400 uppercase tracking-wider flex items-center gap-2">
+                         <Icon name="Sliders" size={16} /> Ajustes Master y Filtro
+                       </span>
+                       <button 
+                         onClick={() => setShowFilter(false)} 
+                         className="text-slate-400 hover:text-white p-1 rounded-xl hover:bg-white/10 transition-colors"
                        >
-                         <option value="allpass">Ninguno (Bypass)</option>
-                         <option value="lowpass">Paso Bajo (Lowpass)</option>
-                         <option value="highpass">Paso Alto (Highpass)</option>
-                         <option value="bandpass">Paso Banda (Bandpass)</option>
-                         <option value="notch">Rechazo de Banda (Notch)</option>
-                       </select>
+                         <Icon name="X" size={16} />
+                       </button>
                      </div>
                      
-                     <div className={masterFilter.type === 'allpass' ? 'opacity-50 pointer-events-none' : ''}>
-                       <label className="flex items-center justify-between text-[10px] text-slate-400 font-bold mb-1">
-                         <span>FRECUENCIA DE CORTE</span>
-                         <span className="text-fuchsia-300">{Math.round(masterFilter.frequency)} Hz</span>
-                       </label>
-                       <input 
-                         type="range" min="20" max="20000" step="1"
-                         value={masterFilter.frequency}
-                         onChange={(e) => updateMasterFilter({ frequency: Number(e.target.value) })}
-                         className="w-full accent-fuchsia-500"
-                       />
-                     </div>
+                     <div className="space-y-4">
+                       {/* Mobile Master Volume (visible when screen < md) */}
+                       <div className="md:hidden pb-3 border-b border-white/10">
+                         <div className="flex items-center justify-between text-[10px] text-cyan-300 font-bold uppercase tracking-wider mb-2">
+                           <span className="flex items-center gap-1.5"><Icon name="Volume2" size={14} /> Volumen Master</span>
+                           <span>{Math.round(audio.masterVolume * 100)}%</span>
+                         </div>
+                         <input 
+                           type="range" min="0" max="1" step="0.01"
+                           value={audio.masterVolume}
+                           onChange={(e) => audio.updateMasterVolume(parseFloat(e.target.value))}
+                           className="w-full accent-cyan-400 h-1.5 bg-slate-800 rounded-full"
+                         />
+                       </div>
 
-                     <div className={masterFilter.type === 'allpass' ? 'opacity-50 pointer-events-none' : ''}>
-                       <label className="flex items-center justify-between text-[10px] text-slate-400 font-bold mb-1">
-                         <span>RESONANCIA (Q)</span>
-                         <span className="text-fuchsia-300">{masterFilter.Q.toFixed(2)}</span>
-                       </label>
-                       <input 
-                         type="range" min="0.0001" max="10" step="0.1"
-                         value={masterFilter.Q}
-                         onChange={(e) => updateMasterFilter({ Q: Number(e.target.value) })}
-                         className="w-full accent-fuchsia-500"
-                       />
+                       <div>
+                         <label className="text-[10px] text-slate-400 font-bold mb-1.5 block tracking-wider uppercase">TIPO DE FILTRO</label>
+                         <select 
+                           value={masterFilter.type}
+                           onChange={(e) => updateMasterFilter({ type: e.target.value as any })}
+                           className="w-full bg-black/60 border border-white/15 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-fuchsia-500 font-medium"
+                         >
+                           <option value="allpass">Ninguno (Bypass)</option>
+                           <option value="lowpass">Paso Bajo (Lowpass)</option>
+                           <option value="highpass">Paso Alto (Highpass)</option>
+                           <option value="bandpass">Paso Banda (Bandpass)</option>
+                           <option value="notch">Rechazo de Banda (Notch)</option>
+                         </select>
+                       </div>
+                       
+                       <div className={masterFilter.type === 'allpass' ? 'opacity-40 pointer-events-none' : ''}>
+                         <label className="flex items-center justify-between text-[10px] text-slate-400 font-bold mb-1.5 uppercase tracking-wider">
+                           <span>FRECUENCIA DE CORTE</span>
+                           <span className="text-fuchsia-300 font-mono">{Math.round(masterFilter.frequency)} Hz</span>
+                         </label>
+                         <input 
+                           type="range" min="20" max="20000" step="1"
+                           value={masterFilter.frequency}
+                           onChange={(e) => updateMasterFilter({ frequency: Number(e.target.value) })}
+                           className="w-full accent-fuchsia-500 h-1.5 bg-slate-800 rounded-full cursor-pointer"
+                         />
+                       </div>
+
+                       <div className={masterFilter.type === 'allpass' ? 'opacity-40 pointer-events-none' : ''}>
+                         <label className="flex items-center justify-between text-[10px] text-slate-400 font-bold mb-1.5 uppercase tracking-wider">
+                           <span>RESONANCIA (Q)</span>
+                           <span className="text-fuchsia-300 font-mono">{masterFilter.Q.toFixed(2)}</span>
+                         </label>
+                         <input 
+                           type="range" min="0.0001" max="10" step="0.1"
+                           value={masterFilter.Q}
+                           onChange={(e) => updateMasterFilter({ Q: Number(e.target.value) })}
+                           className="w-full accent-fuchsia-500 h-1.5 bg-slate-800 rounded-full cursor-pointer"
+                         />
+                       </div>
                      </div>
                    </div>
-                 </div>
+                 </>
                )}
             </div>
 

@@ -48,6 +48,7 @@ export const SpiralVisualizer: React.FC<Props> = ({ analyser, activeOscillators 
   const [config, setConfig] = useState<SpiralConfig>(DEFAULT_CONFIG);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showFullscreenControls, setShowFullscreenControls] = useState(true);
+  const [showControlsMobile, setShowControlsMobile] = useState(true);
   const hideControlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const resetHideControlsTimeout = () => {
@@ -364,9 +365,11 @@ export const SpiralVisualizer: React.FC<Props> = ({ analyser, activeOscillators 
     disabled: boolean = false
   ) => {
     return (
-      <div className="flex flex-col gap-1">
-        <span className="text-slate-400 uppercase font-bold tracking-wider block">{label}</span>
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col gap-1 min-w-0 bg-white/[0.03] p-2 sm:p-2.5 rounded-xl border border-white/5">
+        <span className="text-slate-400 uppercase font-bold tracking-wider text-[9px] block truncate" title={label}>
+          {label}
+        </span>
+        <div className="flex items-center gap-2 min-w-0">
           <input 
             type="range" 
             min={min} 
@@ -375,7 +378,7 @@ export const SpiralVisualizer: React.FC<Props> = ({ analyser, activeOscillators 
             value={value} 
             disabled={disabled} 
             onChange={(e) => setConfig(prev => ({ ...prev, [key]: parseFloat(e.target.value) }))} 
-            className={`flex-grow h-1 bg-slate-800 rounded-full appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:bg-cyan-400 [&::-webkit-slider-thumb]:rounded-full ${disabled ? 'opacity-50' : 'cursor-pointer'}`} 
+            className={`flex-1 min-w-0 h-1.5 bg-slate-800 rounded-full appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-cyan-400 [&::-webkit-slider-thumb]:rounded-full ${disabled ? 'opacity-50' : 'cursor-pointer'}`} 
           />
           <input 
             type="number"
@@ -385,7 +388,7 @@ export const SpiralVisualizer: React.FC<Props> = ({ analyser, activeOscillators 
             value={value}
             disabled={disabled}
             onChange={(e) => setConfig(prev => ({ ...prev, [key]: parseFloat(e.target.value) || 0 }))}
-            className={`w-14 bg-black/60 border border-white/10 rounded px-1 py-0.5 text-[10px] text-white text-center focus:outline-none focus:border-cyan-500 ${disabled ? 'opacity-50' : ''}`}
+            className={`w-12 sm:w-14 shrink-0 bg-black/70 border border-white/10 rounded px-1 py-0.5 text-[10px] text-white font-mono text-center focus:outline-none focus:border-cyan-500 ${disabled ? 'opacity-50' : ''}`}
           />
         </div>
       </div>
@@ -396,109 +399,116 @@ export const SpiralVisualizer: React.FC<Props> = ({ analyser, activeOscillators 
     <div ref={containerRef} className={`relative flex flex-col h-full group ${
       isFullscreen 
         ? "bg-black" 
-        : "rounded-3xl border border-cyan-500/30 bg-black/80 backdrop-blur-2xl p-6 shadow-[0_0_50px_rgba(0,0,0,0.9),inset_0_0_20px_rgba(34,211,238,0.05)] overflow-hidden"
+        : "rounded-3xl border border-cyan-500/30 bg-black/80 backdrop-blur-2xl p-4 sm:p-6 shadow-[0_0_50px_rgba(0,0,0,0.9),inset_0_0_20px_rgba(34,211,238,0.05)] overflow-hidden"
     }`}>
       {!isFullscreen && <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 via-purple-500/5 to-pink-500/5 pointer-events-none"></div>}
       
       {/* Header and Basic Controls */}
       {!isFullscreen && (
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-4 relative z-10 border-b border-white/10 pb-4 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/30 shadow-[0_0_15px_rgba(168,85,247,0.2)]">
-            <Icon name="Aperture" size={22} className="text-purple-400 drop-shadow-[0_0_8px_rgba(168,85,247,0.8)]" />
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 relative z-10 border-b border-white/10 pb-4 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="p-2 sm:p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/30 shadow-[0_0_15px_rgba(168,85,247,0.2)]">
+              <Icon name="Aperture" size={20} className="text-purple-400 drop-shadow-[0_0_8px_rgba(168,85,247,0.8)]" />
+            </div>
+            <div>
+              <h3 className="text-base sm:text-lg font-display font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-300 via-white to-pink-300">
+                Espiral Holográfica
+              </h3>
+              <p className="text-[9px] sm:text-[10px] text-purple-200/70 font-bold uppercase tracking-widest">
+                Geometría Cuántica Fractal
+              </p>
+            </div>
           </div>
-          <div>
-            <h3 className="text-lg font-display font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-300 via-white to-pink-300">
-              Espiral Holográfica
-            </h3>
-            <p className="text-[10px] text-purple-200/70 font-bold uppercase tracking-widest">
-              Geometría Cuántica Fractal
-            </p>
-          </div>
-        </div>
 
-        <div className="flex items-center gap-2 flex-wrap justify-end">
-           <button 
-             onClick={resetToDefaults}
-             className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors bg-red-500/20 text-red-300 border border-red-500/30 hover:bg-red-500/40"
-             title="Restablecer Ajustes"
-           >
-             Restablecer
-           </button>
-           <button 
-             onClick={() => setConfig(prev => ({ ...prev, autoPilot: !prev.autoPilot }))}
-             className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors ${config.autoPilot ? 'bg-purple-500/30 text-purple-200 border border-purple-500/50' : 'bg-black/60 text-slate-400 border border-white/10'}`}
-           >
-             Auto Piloto {config.autoPilot ? 'ON' : 'OFF'}
-           </button>
-           <select
-             value={config.colorPalette}
-             onChange={(e) => setConfig(prev => ({ ...prev, colorPalette: e.target.value as CymaticsPalette }))}
-             className="bg-black/60 border border-white/10 rounded-xl px-3 py-1.5 text-[10px] font-bold text-purple-200 uppercase tracking-wider focus:outline-none focus:border-purple-400 cursor-pointer"
-           >
-             <option value="holographic">Holográfico</option>
-             <option value="quantum">Quantum Blue</option>
-             <option value="neon">Neon Magenta</option>
-             <option value="aurora">Aurora Green</option>
-             <option value="gold">Gold Alquimia</option>
-           </select>
-           <button 
-             onClick={handleFullscreen}
-             className="px-3 py-1.5 rounded-lg bg-black/60 border border-white/10 text-slate-400 hover:text-white hover:border-white/30 transition-colors"
-             title="Pantalla Completa"
-           >
-             <Icon name="Maximize2" size={16} />
-           </button>
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-start sm:justify-end">
+            <button 
+              onClick={() => setShowControlsMobile(!showControlsMobile)}
+              className="sm:hidden px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors bg-purple-500/20 text-purple-200 border border-purple-500/30 flex items-center gap-1"
+            >
+              <Icon name="Sliders" size={12} />
+              {showControlsMobile ? 'Ocultar' : 'Ajustes'}
+            </button>
+            <button 
+              onClick={resetToDefaults}
+              className="px-2.5 sm:px-3 py-1.5 rounded-lg text-[9px] sm:text-[10px] font-bold uppercase tracking-wider transition-colors bg-red-500/20 text-red-300 border border-red-500/30 hover:bg-red-500/40"
+              title="Restablecer Ajustes"
+            >
+              Restablecer
+            </button>
+            <button 
+              onClick={() => setConfig(prev => ({ ...prev, autoPilot: !prev.autoPilot }))}
+              className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-[9px] sm:text-[10px] font-bold uppercase tracking-wider transition-colors ${config.autoPilot ? 'bg-purple-500/30 text-purple-200 border border-purple-500/50' : 'bg-black/60 text-slate-400 border border-white/10'}`}
+            >
+              Auto {config.autoPilot ? 'ON' : 'OFF'}
+            </button>
+            <select
+              value={config.colorPalette}
+              onChange={(e) => setConfig(prev => ({ ...prev, colorPalette: e.target.value as CymaticsPalette }))}
+              className="bg-black/60 border border-white/10 rounded-xl px-2 sm:px-3 py-1.5 text-[9px] sm:text-[10px] font-bold text-purple-200 uppercase tracking-wider focus:outline-none focus:border-purple-400 cursor-pointer"
+            >
+              <option value="holographic">Holográfico</option>
+              <option value="quantum">Quantum Blue</option>
+              <option value="neon">Neon Magenta</option>
+              <option value="aurora">Aurora Green</option>
+              <option value="gold">Gold Alquimia</option>
+            </select>
+            <button 
+              onClick={handleFullscreen}
+              className="px-2.5 sm:px-3 py-1.5 rounded-lg bg-black/60 border border-white/10 text-slate-400 hover:text-white hover:border-white/30 transition-colors"
+              title="Pantalla Completa"
+            >
+              <Icon name="Maximize2" size={15} />
+            </button>
+          </div>
         </div>
-      </div>
       )}
 
       {/* Advanced Controls */}
-      {!isFullscreen && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-4 mb-4 relative z-10 bg-black/40 p-4 rounded-2xl border border-white/5 text-[9px] shrink-0">
+      {!isFullscreen && showControlsMobile && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5 mb-4 relative z-10 bg-black/40 p-3 sm:p-4 rounded-2xl border border-white/5 text-[9px] shrink-0">
         
-        {renderNumberInput("Iteraciones", config.iter, 'iter', 100, 10000, 100)}
-        {renderNumberInput("Zoom Inicial", config.zoom, 'zoom', 0.001, 0.5, 0.001)}
-        {renderNumberInput("Vel. Profundidad", config.depthSpeed, 'depthSpeed', 0.1, 5.0, 0.1, !config.depthMode)}
-        {renderNumberInput("Multiplicador Ángulo", config.angleMultiplier, 'angleMultiplier', 0.1, 10.0, 0.1, config.autoPilot)}
-        {renderNumberInput("Factor Crecimiento (K)", config.k, 'k', 0.5, 1.5, 0.001, config.autoPilot)}
-        
-        <div>
-          <span className="text-slate-400 uppercase font-bold tracking-wider block mb-1 text-emerald-400">Túnel Infinito (Continuo)</span>
-          <button 
-            onClick={() => {
-              setConfig(prev => {
-                const nextVal = !prev.infiniteDepth;
-                return { 
-                  ...prev, 
-                  infiniteDepth: nextVal,
-                  iter: nextVal ? 10000 : 1000,
-                  zoom: nextVal ? 0.001 : 0.05
-                };
-              });
-            }} 
-            className={`w-full py-1.5 rounded border text-[10px] uppercase font-bold transition-colors ${config.infiniteDepth ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50' : 'bg-black/40 text-slate-400 border-white/10'}`}>
-            {config.infiniteDepth ? 'Activo' : 'Inactivo'}
-          </button>
-        </div>
-        
-        <div>
-          <span className="text-slate-400 uppercase font-bold tracking-wider block mb-1 text-pink-400">Trazo Ondular</span>
-          <button onClick={() => setConfig(prev => ({ ...prev, waveStyle: !prev.waveStyle }))} className={`w-full py-1.5 rounded border text-[10px] uppercase font-bold transition-colors ${config.waveStyle ? 'bg-pink-500/20 text-pink-300 border-pink-500/50' : 'bg-black/40 text-slate-400 border-white/10'}`}>
-            {config.waveStyle ? 'Ondas' : 'Liso'}
-          </button>
-        </div>
-        
-        {renderNumberInput("Amplitud Onda", config.waveAmplitude, 'waveAmplitude', 0.1, 2.0, 0.1, !config.waveStyle)}
-        {renderNumberInput("Iluminación", config.illumination, 'illumination', 0, 3.0, 0.1)}
-        {renderNumberInput("Grosor Línea", config.thickness, 'thickness', 0.5, 10.0, 0.5)}
+          {renderNumberInput("Iteraciones", config.iter, 'iter', 100, 10000, 100)}
+          {renderNumberInput("Zoom Inicial", config.zoom, 'zoom', 0.001, 0.5, 0.001)}
+          {renderNumberInput("Vel. Profundidad", config.depthSpeed, 'depthSpeed', 0.1, 5.0, 0.1, !config.depthMode)}
+          {renderNumberInput("Mult. Ángulo", config.angleMultiplier, 'angleMultiplier', 0.1, 10.0, 0.1, config.autoPilot)}
+          {renderNumberInput("Factor Crecimiento (K)", config.k, 'k', 0.5, 1.5, 0.001, config.autoPilot)}
+          
+          <div className="flex flex-col gap-1 min-w-0 bg-white/[0.03] p-2 sm:p-2.5 rounded-xl border border-white/5 justify-between">
+            <span className="text-emerald-400 uppercase font-bold tracking-wider text-[9px] block truncate">Túnel Infinito</span>
+            <button 
+              onClick={() => {
+                setConfig(prev => {
+                  const nextVal = !prev.infiniteDepth;
+                  return { 
+                    ...prev, 
+                    infiniteDepth: nextVal,
+                    iter: nextVal ? 10000 : 1000,
+                    zoom: nextVal ? 0.001 : 0.05
+                  };
+                });
+              }} 
+              className={`w-full py-1.5 rounded border text-[10px] uppercase font-bold transition-colors ${config.infiniteDepth ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50' : 'bg-black/40 text-slate-400 border-white/10'}`}>
+              {config.infiniteDepth ? 'Activo' : 'Inactivo'}
+            </button>
+          </div>
+          
+          <div className="flex flex-col gap-1 min-w-0 bg-white/[0.03] p-2 sm:p-2.5 rounded-xl border border-white/5 justify-between">
+            <span className="text-pink-400 uppercase font-bold tracking-wider text-[9px] block truncate">Trazo Ondular</span>
+            <button onClick={() => setConfig(prev => ({ ...prev, waveStyle: !prev.waveStyle }))} className={`w-full py-1.5 rounded border text-[10px] uppercase font-bold transition-colors ${config.waveStyle ? 'bg-pink-500/20 text-pink-300 border-pink-500/50' : 'bg-black/40 text-slate-400 border-white/10'}`}>
+              {config.waveStyle ? 'Ondas' : 'Liso'}
+            </button>
+          </div>
+          
+          {renderNumberInput("Amplitud Onda", config.waveAmplitude, 'waveAmplitude', 0.1, 2.0, 0.1, !config.waveStyle)}
+          {renderNumberInput("Iluminación", config.illumination, 'illumination', 0, 3.0, 0.1)}
+          {renderNumberInput("Grosor Línea", config.thickness, 'thickness', 0.5, 10.0, 0.5)}
 
-      </div>
+        </div>
       )}
       
       {/* Geometría Sagrada Controls */}
       {!isFullscreen && (
-        <div className="flex gap-2 mb-4 relative z-10 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 mb-4 relative z-10 shrink-0">
           <button 
              onClick={() => setConfig(prev => ({ ...prev, sacredGeometryEnabled: !prev.sacredGeometryEnabled, sacredGeometryModes: !prev.sacredGeometryEnabled ? ['flowerOfLife'] : [] }))}
              className={`px-3 py-1 text-[10px] rounded-lg font-bold uppercase transition-colors ${config.sacredGeometryEnabled ? 'bg-cyan-500/30 text-cyan-200 border border-cyan-500/50' : 'bg-black/60 text-slate-400 border border-white/10'}`}
@@ -517,7 +527,7 @@ export const SpiralVisualizer: React.FC<Props> = ({ analyser, activeOscillators 
                  <option value="torus">Toroide Cósmico</option>
               </select>
            )}
-      </div>
+        </div>
       )}
 
       <div 
@@ -577,17 +587,17 @@ export const SpiralVisualizer: React.FC<Props> = ({ analyser, activeOscillators 
                       </div>
 
                       {/* Spiral Advanced Configs duplicated for Fullscreen */}
-                      <div className="bg-black/40 p-5 rounded-2xl border border-white/5">
+                      <div className="bg-black/40 p-4 sm:p-5 rounded-2xl border border-white/5">
                         <h4 className="text-purple-400 font-bold uppercase tracking-wider text-[10px] mb-4">Configuración del Espiral</h4>
-                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-5">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
                           {renderNumberInput("Iteraciones", config.iter, 'iter', 100, 10000, 100)}
                           {renderNumberInput("Zoom Inicial", config.zoom, 'zoom', 0.001, 0.5, 0.001)}
                           {renderNumberInput("Vel. Profund.", config.depthSpeed, 'depthSpeed', 0.1, 5.0, 0.1, !config.depthMode)}
                           {renderNumberInput("Mult. Ángulo", config.angleMultiplier, 'angleMultiplier', 0.1, 10.0, 0.1, config.autoPilot)}
                           {renderNumberInput("Factor K", config.k, 'k', 0.5, 1.5, 0.001, config.autoPilot)}
                           
-                          <div>
-                            <span className="text-slate-400 uppercase font-bold tracking-wider block mb-2 text-[10px] text-emerald-400">Túnel Infinito</span>
+                          <div className="flex flex-col gap-1 min-w-0 bg-white/[0.03] p-2.5 rounded-xl border border-white/5 justify-between">
+                            <span className="text-emerald-400 uppercase font-bold tracking-wider block text-[10px]">Túnel Infinito</span>
                             <button 
                               onClick={() => {
                                 setConfig(prev => {
@@ -604,8 +614,8 @@ export const SpiralVisualizer: React.FC<Props> = ({ analyser, activeOscillators 
                               {config.infiniteDepth ? 'Activo' : 'Inactivo'}
                             </button>
                           </div>
-                          <div>
-                            <span className="text-slate-400 uppercase font-bold tracking-wider block mb-2 text-[10px] text-pink-400">Trazo Ondular</span>
+                          <div className="flex flex-col gap-1 min-w-0 bg-white/[0.03] p-2.5 rounded-xl border border-white/5 justify-between">
+                            <span className="text-pink-400 uppercase font-bold tracking-wider block text-[10px]">Trazo Ondular</span>
                             <button onClick={() => setConfig(prev => ({ ...prev, waveStyle: !prev.waveStyle }))} className={`w-full py-2 rounded-lg border text-[10px] uppercase font-bold transition-colors ${config.waveStyle ? 'bg-pink-500/20 text-pink-300 border-pink-500/50' : 'bg-black/40 text-slate-400 border-white/10'}`}>
                               {config.waveStyle ? 'Ondas' : 'Liso'}
                             </button>
