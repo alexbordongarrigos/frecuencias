@@ -9,7 +9,7 @@ import {
   CloudDownload, FileAudio, Inbox, Mic, MicOff, Headphones, Aperture, Maximize, Maximize2, Minimize2,
   RefreshCw, LogOut, Monitor, Apple, Smartphone, Video, VideoOff, MessageSquare, Hand, Sliders,
   Lock, Compass, Hexagon, CheckCircle, Circle, EyeOff, UserCheck, RadioReceiver, Server, Send,
-  XCircle, Anchor, HelpCircle, Phone, Volume2, VolumeX, Grid
+  XCircle, Anchor, HelpCircle, Phone, Volume2, VolumeX, Grid, ExternalLink, LogIn, AlertCircle, Check
 } from 'lucide-react';
 
 export const icons = {
@@ -90,7 +90,11 @@ export const icons = {
   Phone,
   Volume2,
   VolumeX,
-  Grid
+  Grid,
+  ExternalLink,
+  LogIn,
+  AlertCircle,
+  Check
 };
 
 interface IconProps {

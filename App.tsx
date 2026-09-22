@@ -16,9 +16,10 @@ import LiveSyncCall from './components/LiveSyncCall';
 import Introduction from './components/Introduction';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { LiveSession, PresetContent } from './types';
-import { getCurrentStarseedUser, StarseedUser, fetchLiveSessionById } from './services/starseedAuth';
+import { getCurrentStarseedUser, logoutStarseed, subscribeToStarseedAuth, StarseedUser, fetchLiveSessionById } from './services/starseedAuth';
 import { useScreenWakeLock } from './hooks/useScreenWakeLock';
 import { autoUpdateService, AppReleaseInfo } from './services/autoUpdateService';
+import { StarseedLoginModal } from './components/StarseedLoginModal';
 
 export interface SessionPermissions {
   canEditFrequencies: boolean;
@@ -167,9 +168,15 @@ const App: React.FC = () => {
 
   const [showStartSessionModal, setShowStartSessionModal] = useState(false);
   const [presetToStart, setPresetToStart] = useState<PresetContent | null>(null);
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
   React.useEffect(() => {
     getCurrentStarseedUser().then(user => setCurrentUser(user));
+
+    // Subscribe to real-time StarSeed auth state changes
+    const unsubAuth = subscribeToStarseedAuth((user) => {
+      setCurrentUser(user);
+    });
     
     // Subscribe to auto-updates check
     const unsubUpdate = autoUpdateService.subscribe((info) => {
@@ -197,6 +204,7 @@ const App: React.FC = () => {
     }
 
     return () => {
+      unsubAuth();
       unsubUpdate();
     };
   }, []);
@@ -355,6 +363,34 @@ const App: React.FC = () => {
               <Icon name="Download" size={14} className="text-purple-400 animate-bounce" />
               <span>Instalar Apps SO</span>
             </button>
+
+            {currentUser ? (
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-950/50 border border-amber-500/40 shadow-[0_0_20px_rgba(245,158,11,0.25)] backdrop-blur-md animate-fade-in">
+                <img src="/starseed-symbol.png" alt="StarSeed" className="w-4 h-4 object-contain drop-shadow-[0_0_6px_rgba(245,158,11,0.8)]" />
+                <span className="text-xs font-bold text-amber-300">
+                  {currentUser.displayName || currentUser.handle || 'StarSeed'}
+                </span>
+                <button
+                  onClick={async () => {
+                    await logoutStarseed();
+                    setCurrentUser(null);
+                  }}
+                  className="ml-1 p-1 rounded-full text-amber-400/70 hover:text-red-400 hover:bg-white/10 transition-colors cursor-pointer"
+                  title="Cerrar sesión StarSeed OS"
+                >
+                  <Icon name="LogOut" size={12} />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowLoginModal(true)}
+                className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-amber-950/40 hover:bg-amber-900/60 border border-amber-500/40 hover:border-amber-400 text-xs font-bold uppercase tracking-wider text-amber-300 hover:text-amber-100 transition-all shadow-[0_0_20px_rgba(245,158,11,0.2)] cursor-pointer hover:scale-105"
+                title="Conectar con tu cuenta oficial de StarSeed OS"
+              >
+                <img src="/starseed-symbol.png" alt="StarSeed OS" className="w-4 h-4 object-contain drop-shadow-[0_0_6px_rgba(245,158,11,0.8)]" />
+                <span>Conectar StarSeed OS</span>
+              </button>
+            )}
           </div>
           
           <div className="relative inline-block mt-4">
@@ -613,6 +649,15 @@ const App: React.FC = () => {
       )}
 
       {/* --- Modals --- */}
+      <StarseedLoginModal
+        isOpen={showLoginModal}
+        onClose={() => setShowLoginModal(false)}
+        onLoginSuccess={(u) => {
+          setCurrentUser(u);
+          setShowLoginModal(false);
+        }}
+      />
+
       {showStartSessionModal && presetToStart && (
          <StartLiveSessionModal 
             preset={presetToStart}

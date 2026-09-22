@@ -29,3 +29,4 @@ android
 dist_electron
 apps_finales
 
+.env*

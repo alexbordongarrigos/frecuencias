@@ -1,0 +1,8 @@
+android
+dist_electron
+apps_finales
+node_modules
+.git
+.vscode
+.idea
+*.log

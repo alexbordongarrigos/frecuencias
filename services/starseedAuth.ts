@@ -1,12 +1,26 @@
 import { createClient } from '@supabase/supabase-js';
 import { PresetContent, FileSystemNode } from '../types';
 
-// These should ideally be environment variables, but for the integration with Starseed OS
-// we will assume a global config or provide mock URLs if missing.
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://ngudaxsjccdjezxyifpm.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_UQAVJpOGr0HCQU2NMU7Z8Q_TsHIuNFL';
+// Real StarSeed OS Production Supabase Backend (pqzdpmedcsgcedkvndzl)
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://pqzdpmedcsgcedkvndzl.supabase.co';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBxemRwbWVkY3NnY2Vka3ZuZHpsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgxMTk1MTIsImV4cCI6MjEwMzY5NTUxMn0.PSICGp-7LczYnrcv2oCDpozR3Khfbxe6vADUVNuvC-k';
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+    storage: typeof window !== 'undefined' ? window.localStorage : undefined
+  }
+});
+
+export const STARSEED_OS_OFFICIAL_URL = 'https://starseed-os.vercel.app/login';
+
+export const openStarseedRegister = () => {
+  if (typeof window !== 'undefined') {
+    window.open(STARSEED_OS_OFFICIAL_URL, '_blank', 'noopener,noreferrer');
+  }
+};
 
 export interface StarseedUser {
   id: string;
@@ -14,45 +28,83 @@ export interface StarseedUser {
   displayName: string;
   avatar_url?: string;
   cover_url?: string;
+  handle?: string;
 }
 
-export const loginWithStarseed = async (email: string, password: string): Promise<StarseedUser | null> => {
+export const loginWithStarseed = async (identifier: string, password: string): Promise<StarseedUser | null> => {
+  const trimmed = identifier.trim();
+  if (!trimmed) {
+    throw new Error("Por favor, ingresa tu correo o usuario de StarSeed OS.");
+  }
+  if (!password) {
+    throw new Error("Por favor, ingresa tu contraseña.");
+  }
+
+  let email = trimmed;
+
+  // Si el usuario introdujo solo su nombre/handle (sin '@'), buscar o autocompletar con @star.seed
+  if (!email.includes('@')) {
+    try {
+      const { data: handleProfile } = await supabase
+        .from('os_profiles')
+        .select('user_id, handle')
+        .eq('handle', trimmed.toLowerCase())
+        .maybeSingle();
+
+      if (handleProfile && handleProfile.handle) {
+        email = `${handleProfile.handle}@star.seed`;
+      } else {
+        email = `${trimmed.toLowerCase()}@star.seed`;
+      }
+    } catch {
+      email = `${trimmed.toLowerCase()}@star.seed`;
+    }
+  }
+
   const { data, error } = await supabase.auth.signInWithPassword({
     email,
     password,
   });
 
   if (error) {
-    // If account doesn't exist yet on this Supabase project instance, auto-provision
-    if (error.message.includes('Invalid login credentials') || error.status === 400 || error.message.includes('Invalid')) {
-      try {
-        const newUser = await signUpWithStarseed(email, password, email.split('@')[0]);
-        if (newUser) return newUser;
-      } catch (signUpErr: any) {
-        console.error("Starseed OS Auto-Provision Error:", signUpErr);
-        throw new Error(error?.message || "Error al iniciar sesión");
-      }
+    console.error("StarSeed OS Login Error:", error);
+    const msg = error.message.toLowerCase();
+    if (msg.includes('invalid login credentials') || msg.includes('invalid_grant')) {
+      throw new Error("Credenciales inválidas. Comprueba tu usuario/correo y contraseña registrados en StarSeed OS.");
+    } else if (msg.includes('email not confirmed')) {
+      throw new Error("Este correo no ha sido confirmado aún en StarSeed OS.");
+    } else if (msg.includes('rate limit')) {
+      throw new Error("Demasiados intentos. Espera unos minutos e inténtalo de nuevo.");
+    } else if (msg.includes('failed to fetch') || msg.includes('network')) {
+      throw new Error("Error de conexión con el servidor de StarSeed OS. Comprueba tu conexión a internet.");
     }
-    console.error("Starseed OS Login Error:", error?.message);
-    throw new Error(error?.message || "Error al iniciar sesión");
+    throw new Error(error.message || "Error al conectar con StarSeed OS.");
   }
 
   if (!data.user) {
-    throw new Error("No se pudo obtener la sesión de usuario");
+    throw new Error("No se pudo obtener la sesión desde StarSeed OS.");
   }
 
-  const { data: profile } = await supabase
-    .from('os_profiles')
-    .select('avatar_url, cover_url, display_name')
-    .eq('user_id', data.user.id)
-    .single();
+  // Cargar perfil soberano desde os_profiles
+  let profile = null;
+  try {
+    const { data: p } = await supabase
+      .from('os_profiles')
+      .select('avatar_url, cover_url, display_name, handle')
+      .eq('user_id', data.user.id)
+      .maybeSingle();
+    profile = p;
+  } catch (e) {
+    console.warn("No se pudo cargar os_profiles:", e);
+  }
 
   return {
     id: data.user.id,
     email: data.user.email || '',
-    displayName: profile?.display_name || data.user.user_metadata?.full_name || email.split('@')[0] || 'Starseed Explorer',
+    displayName: profile?.display_name || profile?.handle || data.user.user_metadata?.full_name || email.split('@')[0] || 'Starseed Explorer',
     avatar_url: profile?.avatar_url,
     cover_url: profile?.cover_url,
+    handle: profile?.handle,
   };
 };
 
@@ -69,7 +121,7 @@ export const signUpWithStarseed = async (email: string, password: string, displa
 
   if (error || !data.user) {
     console.error("Starseed OS SignUp Error:", error?.message);
-    throw new Error(error?.message || "Registro fallido");
+    throw new Error(error?.message || "Registro fallido en StarSeed OS");
   }
 
   // Ensure os_profile exists
@@ -95,21 +147,43 @@ export const logoutStarseed = async () => {
   await supabase.auth.signOut();
 };
 
+export const subscribeToStarseedAuth = (callback: (user: StarseedUser | null) => void) => {
+  const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    if (session?.user) {
+      const user = await getCurrentStarseedUser();
+      callback(user);
+    } else {
+      callback(null);
+    }
+  });
+
+  return () => {
+    subscription.unsubscribe();
+  };
+};
+
 export const getCurrentStarseedUser = async (): Promise<StarseedUser | null> => {
   const { data: { session } } = await supabase.auth.getSession();
   if (session?.user) {
-    const { data: profile } = await supabase
-      .from('os_profiles')
-      .select('avatar_url, cover_url, display_name')
-      .eq('user_id', session.user.id)
-      .single();
+    let profile = null;
+    try {
+      const { data: p } = await supabase
+        .from('os_profiles')
+        .select('avatar_url, cover_url, display_name, handle')
+        .eq('user_id', session.user.id)
+        .maybeSingle();
+      profile = p;
+    } catch (e) {
+      console.warn("Error leyendo perfil de sesión:", e);
+    }
 
     return {
       id: session.user.id,
       email: session.user.email || '',
-      displayName: profile?.display_name || session.user.user_metadata?.full_name || 'Starseed Explorer',
+      displayName: profile?.display_name || profile?.handle || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Starseed Explorer',
       avatar_url: profile?.avatar_url,
       cover_url: profile?.cover_url,
+      handle: profile?.handle,
     };
   }
   return null;

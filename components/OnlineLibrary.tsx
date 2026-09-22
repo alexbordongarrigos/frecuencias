@@ -4,6 +4,7 @@ import {
   loginWithStarseed, 
   logoutStarseed, 
   getCurrentStarseedUser, 
+  subscribeToStarseedAuth,
   fetchCommunityPresets, 
   fetchLiveSessions,
   StarseedUser 
@@ -12,6 +13,7 @@ import { fetchCommunityProfiles, checkResonance, resonateWithUser, unresonateWit
 import { FileSystemNode, LiveSession, CATEGORIES, OmniProfile, OscillatorState } from '../types';
 import PublishParticleModal from './PublishParticleModal';
 import MeshSignalMap from './MeshSignalMap';
+import { StarseedLoginModal } from './StarseedLoginModal';
 
 interface Props {
   onLoadPreset: (node: FileSystemNode) => void;
@@ -27,9 +29,7 @@ const OnlineLibrary: React.FC<Props> = ({ onLoadPreset, onJoinSession, currentOs
   const [sessions, setSessions] = useState<LiveSession[]>([]);
   const [profiles, setProfiles] = useState<OmniProfile[]>([]);
   const [resonancesCache, setResonancesCache] = useState<Record<string, boolean>>({});
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [isRegistering, setIsRegistering] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState<'vibras' | 'entonacion' | 'perfiles' | 'radar'>('vibras');
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -77,9 +77,15 @@ const OnlineLibrary: React.FC<Props> = ({ onLoadPreset, onJoinSession, currentOs
       setLoading(false);
     };
     init();
+
+    const unsubAuth = subscribeToStarseedAuth((updatedUser) => {
+      setUser(updatedUser);
+      loadData();
+    });
     
     return () => {
       stopPreview(); // Cleanup preview audio on unmount
+      unsubAuth();
     };
   }, []);
 
@@ -108,25 +114,6 @@ const OnlineLibrary: React.FC<Props> = ({ onLoadPreset, onJoinSession, currentOs
     }
   };
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-    try {
-      let loggedUser;
-      if (isRegistering) {
-        loggedUser = await signUpWithStarseed(email, password, email.split('@')[0]);
-      } else {
-        loggedUser = await loginWithStarseed(email, password);
-      }
-      setUser(loggedUser);
-      await loadData();
-    } catch (err: any) {
-      setError(err.message || 'Error de autenticación');
-    }
-    setLoading(false);
-  };
-
   const handleLogout = async () => {
     await logoutStarseed();
     setUser(null);
@@ -139,7 +126,7 @@ const OnlineLibrary: React.FC<Props> = ({ onLoadPreset, onJoinSession, currentOs
 
   const handleProtectedAction = (action: () => void) => {
     if (!user) {
-      setError('force_login');
+      setShowLoginModal(true);
       return;
     }
     action();
@@ -282,50 +269,27 @@ const OnlineLibrary: React.FC<Props> = ({ onLoadPreset, onJoinSession, currentOs
                   <option value="private" className="bg-slate-900 text-white">Conexión: Privada (Local)</option>
                 </select>
               </div>
-              <button onClick={() => setError('force_login')} className="px-5 py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 rounded-xl text-sm font-bold transition-all flex items-center gap-2 shadow-[0_0_15px_rgba(245,158,11,0.2)]">
+              <button 
+                onClick={() => setShowLoginModal(true)} 
+                className="px-5 py-2.5 bg-gradient-to-r from-amber-500/20 to-amber-600/20 hover:from-amber-500/30 hover:to-amber-600/30 text-amber-300 border border-amber-500/40 rounded-xl text-sm font-bold transition-all flex items-center gap-2 shadow-[0_0_15px_rgba(245,158,11,0.2)] hover:scale-105 cursor-pointer"
+              >
                 <Icon name="LogIn" size={16} />
-                Ingresar / Registrarse
+                Ingresar / Conectar StarSeed OS
               </button>
             </div>
           </>
         )}
       </div>
 
-      {(!user && error === 'force_login') && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-black/80 border border-white/10 p-8 rounded-3xl backdrop-blur-xl w-full max-w-md shadow-[0_0_50px_rgba(245,158,11,0.2)]">
-            <div className="flex justify-center mb-6">
-              <div className="w-16 h-16 rounded-full bg-amber-950/30 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.5)]">
-                 <img src="/starseed-symbol.png" alt="Starseed OS" className="w-8 h-8 object-contain drop-shadow-[0_0_10px_rgba(245,158,11,0.8)]" />
-              </div>
-            </div>
-            <h2 className="text-2xl font-black text-white text-center mb-2">Starseed OS</h2>
-            <p className="text-sm text-slate-400 text-center mb-8">Inicia sesión con tu cuenta universal para publicar, transmitir y sincronizar tus presets.</p>
-            
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div>
-                <input type="email" placeholder="Correo electrónico" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-colors" value={email} onChange={e => setEmail(e.target.value)} />
-              </div>
-              <div>
-                <input type="password" placeholder="Contraseña" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-colors" value={password} onChange={e => setPassword(e.target.value)} />
-              </div>
-              {error && error !== 'force_login' && <p className="text-red-400 text-sm">{error}</p>}
-
-              <div className="flex gap-3 mt-4">
-                 <button type="button" onClick={() => setError('')} className="w-full bg-white/5 hover:bg-white/10 text-white font-bold py-3 rounded-xl transition-colors border border-white/10">Cancelar</button>
-                 <button type="submit" className="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 rounded-xl transition-colors shadow-[0_0_15px_rgba(245,158,11,0.3)]">
-                   {isRegistering ? "Crear Cuenta" : "Conectar"}
-                 </button>
-              </div>
-              <div className="text-center mt-4">
-                 <button type="button" onClick={() => setIsRegistering(!isRegistering)} className="text-xs text-amber-400 hover:text-amber-300 underline">
-                   {isRegistering ? "¿Ya tienes cuenta? Inicia sesión aquí" : "¿No tienes cuenta? Regístrate aquí"}
-                 </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <StarseedLoginModal
+        isOpen={showLoginModal}
+        onClose={() => setShowLoginModal(false)}
+        onLoginSuccess={(loggedUser) => {
+          setUser(loggedUser);
+          setShowLoginModal(false);
+          loadData();
+        }}
+      />
 
       <div className="flex flex-col md:flex-row gap-4 mb-6 shrink-0 w-full justify-between items-start md:items-center">
         <div className="flex bg-black/50 p-1 rounded-xl border border-white/5 shrink-0 w-full md:w-auto overflow-x-auto custom-scrollbar">
