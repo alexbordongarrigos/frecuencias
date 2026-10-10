@@ -1,9 +1,52 @@
 import { createClient } from '@supabase/supabase-js';
 import { PresetContent, FileSystemNode } from '../types';
 
-// Real StarSeed OS Production Supabase Backend (pqzdpmedcsgcedkvndzl)
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://pqzdpmedcsgcedkvndzl.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBxemRwbWVkY3NnY2Vka3ZuZHpsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgxMTk1MTIsImV4cCI6MjEwMzY5NTUxMn0.PSICGp-7LczYnrcv2oCDpozR3Khfbxe6vADUVNuvC-k';
+// ── Cuenta StarSeed OS: a qué base de datos se conecta (2026-10-10) ─────────────────────────────
+// El login fallaba con «exceed_egress_quota»: la app seguía apuntando a pqzdpmedcsgcedkvndzl, el
+// proyecto viejo del OS que Supabase restringió por tráfico. El OS vive ahora en jhgvhkypqadfdkkqoxta.
+// Regla de vinculación de apps (StarSeed Link): la app NO fija el proyecto para siempre. Usa, por
+// orden: lo que diga el propio OS en /api/vinculo/config (guardado de la última vez), el proyecto
+// del entorno si no está retirado, y por último el activo conocido. Las claves anon son públicas
+// por diseño (van en el navegador); nunca se pone aquí una clave de servicio.
+const PROYECTO_ACTIVO = { url: 'https://jhgvhkypqadfdkkqoxta.supabase.co', anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpoZ3Zoa3lwcWFkZmRra3FveHRhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2NDUzNTcsImV4cCI6MjEwNjIyMTM1N30.egttZeqJm7quC962Hk5Lq_nInGmsCml6n0G37N6y4V0' };
+const PROYECTOS_RETIRADOS = ['pqzdpmedcsgcedkvndzl', 'nxstilnyidvkqeosofuh'];
+export const STARSEED_VINCULO_URL = 'https://starseed-os.vercel.app/api/vinculo/config';
+const CLAVE_VINCULO = 'starseed.vinculo.config.v1';
+
+function configGuardada(): { url: string; anonKey: string } | null {
+  try {
+    if (typeof window === 'undefined') return null;
+    const j = JSON.parse(window.localStorage.getItem(CLAVE_VINCULO) || 'null');
+    if (j && typeof j.url === 'string' && /^https:\/\/[a-z0-9]{20}\.supabase\.co$/.test(j.url) && typeof j.anonKey === 'string' && j.anonKey.startsWith('eyJ')) return j;
+  } catch { /* sin almacenamiento */ }
+  return null;
+}
+
+function configInicial(): { url: string; anonKey: string } {
+  const guardada = configGuardada();
+  if (guardada && !PROYECTOS_RETIRADOS.some((r) => guardada.url.includes(r))) return guardada;
+  const envUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined) || '';
+  const envKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) || '';
+  if (envUrl && envKey && !PROYECTOS_RETIRADOS.some((r) => envUrl.includes(r))) return { url: envUrl, anonKey: envKey };
+  return PROYECTO_ACTIVO;
+}
+
+const CONFIG = configInicial();
+const supabaseUrl = CONFIG.url;
+const supabaseAnonKey = CONFIG.anonKey;
+
+// Pregunta al OS si su base de datos cambió; si cambió, se usa en el próximo arranque.
+if (typeof window !== 'undefined' && typeof fetch === 'function') {
+  fetch(STARSEED_VINCULO_URL, { cache: 'no-store' })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((j) => {
+      const sb = j && j.supabase;
+      if (sb && typeof sb.url === 'string' && typeof sb.anonKey === 'string' && sb.url !== supabaseUrl) {
+        window.localStorage.setItem(CLAVE_VINCULO, JSON.stringify({ url: sb.url, anonKey: sb.anonKey }));
+      }
+    })
+    .catch(() => { /* sin red o el OS aún no tiene la ruta: se sigue con la config actual */ });
+}
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
