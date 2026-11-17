@@ -116,6 +116,8 @@ export const CymaticsVisualizer3D: React.FC<Props> = ({
   const particlesRef = useRef<{ x: number; y: number; z: number; vx: number; vy: number; u: number; v: number }[]>([]);
 
   const isDraggingRef = useRef(false);
+  const dragMovedRef = useRef(false);
+  const downPosRef = useRef({ x: 0, y: 0 });
   const lastPointerRef = useRef({ x: 0, y: 0 });
   const pinchDistRef = useRef<number | null>(null);
   const wasNativeFullscreenRef = useRef(false);
@@ -211,13 +213,15 @@ export const CymaticsVisualizer3D: React.FC<Props> = ({
         return { plate: '#34d399', line: '#10b981', particles: '#6ee7b7', glow: 'rgba(52, 211, 153, 0.55)', accent: 'rgba(167, 243, 208, 0.85)' };
       case 'gold':
         return { plate: '#fbbf24', line: '#f59e0b', particles: '#fef08a', glow: 'rgba(251, 191, 36, 0.55)', accent: 'rgba(253, 224, 71, 0.85)' };
-      case 'holographic':
-      default:
-        return { plate: '#22d3ee', line: '#a855f7', particles: '#f472b6', glow: 'rgba(34, 211, 238, 0.55)', accent: 'rgba(192, 132, 252, 0.85)' };
+    case 'bw':
+      return { plate: '#ffffff', line: '#e2e8f0', particles: '#cbd5e1', glow: 'rgba(255, 255, 255, 0.45)', accent: 'rgba(255, 255, 255, 0.85)' };
+    case 'holographic':
+    default:
+      return { plate: '#22d3ee', line: '#a855f7', particles: '#f472b6', glow: 'rgba(34, 211, 238, 0.55)', accent: 'rgba(192, 132, 252, 0.85)' };
     }
   };
 
-  // ResizeObserver, DPR handling, Wheel zoom, and Main 3D Simulation Loop
+  // Smooth 1x Canvas Sizing & Main 3D Simulation Loop (no scroll-blocking wheel handler)
   useEffect(() => {
     const canvas = canvasRef.current;
     const container = canvasContainerRef.current;
@@ -230,27 +234,17 @@ export const CymaticsVisualizer3D: React.FC<Props> = ({
       const rect = container.getBoundingClientRect();
       const width = Math.max(1, Math.floor(rect.width));
       const heightPx = Math.max(1, Math.floor(rect.height));
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
 
-      const targetW = Math.floor(width * dpr);
-      const targetH = Math.floor(heightPx * dpr);
-      if (canvas.width !== targetW || canvas.height !== targetH) {
-        canvas.width = targetW;
-        canvas.height = targetH;
+      if (canvas.width !== width || canvas.height !== heightPx) {
+        canvas.width = width;
+        canvas.height = heightPx;
       }
-      logicalSizeRef.current = { width, height: heightPx, dpr };
+      logicalSizeRef.current = { width, height: heightPx, dpr: 1 };
     };
 
     updateCanvasSize();
     const resizeObserver = new ResizeObserver(() => updateCanvasSize());
     resizeObserver.observe(container);
-
-    const handleWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      const delta = -e.deltaY * 0.0012;
-      setZoom3D(prev => Math.min(2.5, Math.max(0.45, Number((prev + delta).toFixed(3)))));
-    };
-    container.addEventListener('wheel', handleWheel, { passive: false });
 
     let animFrameId: number;
     let fftData = new Uint8Array(256);
@@ -641,19 +635,23 @@ export const CymaticsVisualizer3D: React.FC<Props> = ({
     return () => {
       cancelAnimationFrame(animFrameId);
       resizeObserver.disconnect();
-      container.removeEventListener('wheel', handleWheel);
     };
   }, [isFullscreen]);
 
   // Mouse Drag Handlers
   const handleMouseDown = (e: React.MouseEvent) => {
     isDraggingRef.current = true;
+    dragMovedRef.current = false;
+    downPosRef.current = { x: e.clientX, y: e.clientY };
     lastPointerRef.current = { x: e.clientX, y: e.clientY };
     setConfig(prev => (prev.autoRotate ? { ...prev, autoRotate: false } : prev));
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!isDraggingRef.current) return;
+    if (Math.hypot(e.clientX - downPosRef.current.x, e.clientY - downPosRef.current.y) > 8) {
+      dragMovedRef.current = true;
+    }
     const dx = e.clientX - lastPointerRef.current.x;
     const dy = e.clientY - lastPointerRef.current.y;
     lastPointerRef.current = { x: e.clientX, y: e.clientY };
@@ -677,17 +675,23 @@ export const CymaticsVisualizer3D: React.FC<Props> = ({
   const handleTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length === 1) {
       isDraggingRef.current = true;
+      dragMovedRef.current = false;
+      downPosRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
       pinchDistRef.current = null;
       lastPointerRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
       setConfig(prev => (prev.autoRotate ? { ...prev, autoRotate: false } : prev));
     } else if (e.touches.length === 2) {
       isDraggingRef.current = false;
+      dragMovedRef.current = true;
       pinchDistRef.current = getTouchDist(e.touches[0], e.touches[1]);
     }
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (e.touches.length === 1 && isDraggingRef.current) {
+      if (Math.hypot(e.touches[0].clientX - downPosRef.current.x, e.touches[0].clientY - downPosRef.current.y) > 8) {
+        dragMovedRef.current = true;
+      }
       const dx = e.touches[0].clientX - lastPointerRef.current.x;
       const dy = e.touches[0].clientY - lastPointerRef.current.y;
       lastPointerRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
@@ -897,10 +901,15 @@ export const CymaticsVisualizer3D: React.FC<Props> = ({
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
+      onClick={() => {
+        if (fullscreenMode && !dragMovedRef.current && !showFullscreenControls) {
+          setShowFullscreenControls(true);
+        }
+      }}
     >
       <canvas ref={canvasRef} className="w-full h-full block pointer-events-auto bg-transparent" />
 
-      {!transparentBg && (
+      {!transparentBg && !fullscreenMode && (
         <>
           {/* Equation & Mode Badge */}
           <div className="absolute bottom-3 left-3 right-3 sm:right-auto flex flex-wrap items-center gap-2 pointer-events-none">
@@ -915,6 +924,7 @@ export const CymaticsVisualizer3D: React.FC<Props> = ({
             className="absolute bottom-3 right-3 z-10 flex items-center gap-1 bg-black/70 backdrop-blur-md border border-white/15 rounded-xl p-1 pointer-events-auto"
             onMouseDown={(e) => e.stopPropagation()}
             onTouchStart={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
           >
             <button
               onClick={() => setZoom3D(prev => Math.max(0.45, Number((prev - 0.15).toFixed(2))))}
@@ -943,51 +953,22 @@ export const CymaticsVisualizer3D: React.FC<Props> = ({
     </div>
   );
 
-  // Fullscreen Portal
+  // Fullscreen Portal (0 UI chrome by default; click screen to open centered Menu)
   if (isFullscreen && typeof document !== 'undefined') {
     return createPortal(
       <div className="fixed inset-0 z-[99999] w-screen h-[100dvh] bg-black flex flex-col overflow-hidden select-none">
-        {/* Interactive 3D Canvas fills entire viewport */}
+        {/* Interactive 3D Canvas fills entire viewport cleanly with 0 overlays */}
         {renderInteractiveCanvasSurface(true)}
 
-        {/* Always-Visible & Always-Clickable Floating Top HUD Bar */}
-        <div className="fixed top-3 left-0 right-0 z-30 flex items-center justify-center sm:justify-between px-3 sm:px-6 pointer-events-none">
-          <div className="hidden sm:flex items-center gap-2.5 bg-black/65 backdrop-blur-xl border border-white/15 px-3.5 py-2 rounded-2xl pointer-events-auto shadow-xl">
-            <Icon name="Orbit" size={16} className="text-cyan-400" />
-            <span className="text-xs font-display font-bold text-white tracking-wider">{activeModeInfo.label}</span>
-            <span className="text-[10px] font-mono text-cyan-300 bg-cyan-500/15 border border-cyan-500/30 px-2 py-0.5 rounded-lg">
-              {primaryFreqDisplay.toFixed(1)} Hz
-            </span>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-center gap-2 bg-black/70 backdrop-blur-xl border border-white/15 p-1.5 rounded-2xl pointer-events-auto shadow-[0_8px_30px_rgba(0,0,0,0.85)]">
-            <button
-              onClick={() => setShowFullscreenControls(prev => !prev)}
-              className={`px-3 sm:px-4 py-2 rounded-xl text-[10px] sm:text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 border transition-all ${
-                showFullscreenControls
-                  ? 'bg-cyan-500/25 border-cyan-400/60 text-cyan-200'
-                  : 'bg-white/5 border-white/10 text-slate-200 hover:bg-white/15'
-              }`}
-            >
-              <Icon name="Sliders" size={14} />
-              <span>{showFullscreenControls ? 'Ocultar Ajustes' : 'Abrir Ajustes'}</span>
-            </button>
-
-            <button
-              onClick={exitFullscreen}
-              className="px-3 sm:px-4 py-2 rounded-xl text-[10px] sm:text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 bg-red-500/25 hover:bg-red-500/40 border border-red-400/50 text-red-100 transition-all shadow-[0_0_15px_rgba(239,68,68,0.25)]"
-            >
-              <Icon name="Minimize2" size={14} />
-              <span>Salir Pantalla Completa (Esc)</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Centered Floating Settings Modal (Never overflows viewport) */}
+        {/* Centered Settings Menu Modal (Opens on canvas tap/click, hides cleanly) */}
         {showFullscreenControls && (
-          <div className="fixed inset-0 z-20 flex items-center justify-center p-3 sm:p-6 pt-20 pb-6 pointer-events-none">
+          <div
+            className="fixed inset-0 z-30 flex items-center justify-center p-3 sm:p-6 bg-black/45 backdrop-blur-sm"
+            onClick={() => setShowFullscreenControls(false)}
+          >
             <div
-              className="pointer-events-auto w-full max-w-4xl max-h-[80dvh] overflow-y-auto custom-scrollbar mx-auto my-auto bg-black/85 backdrop-blur-2xl border border-cyan-500/30 p-4 sm:p-6 rounded-3xl shadow-[0_0_80px_rgba(0,0,0,0.95)] flex flex-col gap-5"
+              className="pointer-events-auto w-full max-w-4xl max-h-[84dvh] overflow-y-auto custom-scrollbar mx-auto my-auto bg-black/88 backdrop-blur-2xl border border-cyan-500/35 p-4 sm:p-6 rounded-3xl shadow-[0_0_80px_rgba(0,0,0,0.95)] flex flex-col gap-5"
+              onClick={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
               onTouchStart={(e) => e.stopPropagation()}
               onWheel={(e) => e.stopPropagation()}
@@ -996,21 +977,21 @@ export const CymaticsVisualizer3D: React.FC<Props> = ({
                 <div className="flex items-center gap-2.5">
                   <Icon name="Settings" size={18} className="text-cyan-400" />
                   <h3 className="text-cyan-300 font-display font-bold uppercase tracking-widest text-xs sm:text-sm">
-                    Ajustes de Cimática 3D y Frecuencias
+                    Menú Cimática 3D · {primaryFreqDisplay.toFixed(1)} Hz
                   </h3>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <button
                     onClick={() => setShowFullscreenControls(false)}
-                    className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/15 border border-white/10 text-slate-300 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1"
+                    className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-slate-200 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"
                   >
-                    <Icon name="EyeOff" size={12} /> Ocultar
+                    <Icon name="EyeOff" size={13} /> Ocultar Menú
                   </button>
                   <button
                     onClick={exitFullscreen}
-                    className="px-3 py-1.5 rounded-xl bg-red-500/20 hover:bg-red-500/35 border border-red-500/40 text-red-200 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1"
+                    className="px-3 py-2 rounded-xl bg-red-500/25 hover:bg-red-500/40 border border-red-400/50 text-red-100 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"
                   >
-                    <Icon name="X" size={12} /> Salir (Esc)
+                    <Icon name="Minimize2" size={13} /> Salir de Pantalla Completa
                   </button>
                 </div>
               </div>

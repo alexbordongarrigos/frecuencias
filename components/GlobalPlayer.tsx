@@ -19,17 +19,17 @@ const GlobalPlayer: React.FC<Props> = ({ audio }) => {
   return (
     <div className="fixed bottom-0 left-0 w-full z-50 animate-fade-in">
       <div className="max-w-7xl mx-auto px-4 pb-4">
-        <div className="bg-black/80 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-[0_-10px_50px_rgba(0,0,0,0.8)] p-4 md:p-5 flex items-center gap-4 sm:gap-5 md:gap-8 relative">
+        <div className="quantum-glass rounded-3xl shadow-[0_-10px_50px_rgba(0,0,0,0.8)] p-4 md:p-5 flex items-center gap-4 sm:gap-5 md:gap-8 relative">
             {/* Background decorative glow (isolated with overflow-hidden) */}
             <div className="absolute inset-0 rounded-3xl overflow-hidden pointer-events-none">
-              <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/10 via-purple-500/10 to-pink-500/10"></div>
-              <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent"></div>
+              <div className="absolute inset-0 bg-gradient-to-r from-white/[0.04] via-transparent to-white/[0.04]"></div>
+              <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/30 to-transparent"></div>
             </div>
             
             {/* Play/Pause Button */}
             <button 
                 onClick={toggleMasterPlay}
-                className={`relative group flex-shrink-0 w-14 h-14 md:w-16 md:h-16 rounded-full flex items-center justify-center transition-all duration-500 shadow-[0_0_20px_rgba(0,0,0,0.5)] z-10 ${isPlaying ? 'bg-cyan-500 text-black border-2 border-cyan-300 shadow-[0_0_30px_rgba(34,211,238,0.6)] scale-105' : 'bg-black/50 text-cyan-400 border-2 border-cyan-500/30 hover:border-cyan-400 hover:bg-cyan-950/50 hover:shadow-[0_0_30px_rgba(34,211,238,0.3)]'}`}
+                className={`relative group flex-shrink-0 w-14 h-14 md:w-16 md:h-16 rounded-full flex items-center justify-center transition-all duration-500 z-10 ${isPlaying ? 'morph-btn-primary scale-105' : 'morph-btn-glass morph-accent-text hover:scale-105'}`}
             >
                 <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-white/0 via-white/20 to-white/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
                 {isPlaying ? (

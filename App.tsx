@@ -103,7 +103,7 @@ const App: React.FC = () => {
   const audio = useAudio();
 
   // Morphologic Chromatic Engine (Sound & Microphone -> Adaptive UI + Background)
-  const chromaticMorph = useChromaticMorph(audio.oscillators, audio.getMasterAnalyser);
+  const chromaticMorph = useChromaticMorph(audio.oscillators, audio.isPlaying, audio.getMasterAnalyser);
 
   // Universal Screen Wake Lock (keeps display active across all OSs)
   useScreenWakeLock(true);

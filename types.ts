@@ -231,7 +231,7 @@ export interface AudioContextState {
 
 // --- Cymatics 3D Visualizer Types ---
 
-export type CymaticsPalette = 'holographic' | 'quantum' | 'neon' | 'aurora' | 'gold';
+export type CymaticsPalette = 'bw' | 'holographic' | 'quantum' | 'neon' | 'aurora' | 'gold';
 export type CymaticsMode = 'chladni3d' | 'fluid3d' | 'quantum_lattice' | 'particles3d';
 
 export interface CymaticsConfig {

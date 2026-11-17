@@ -79,10 +79,10 @@
   --morph-accent-3: hsl(var(--morph-hue-3) 90% 62%);
   --morph-text-accent: hsl(var(--morph-hue-1) 92% var(--morph-text-l1));
   --morph-text-accent-2: hsl(var(--morph-hue-2) 90% var(--morph-text-l2));
-  --morph-surface: hsla(var(--morph-hue-1) 28% 7% / 0.78);
-  --morph-surface-deep: hsla(var(--morph-hue-3) 26% 5% / 0.86);
-  --morph-border: hsla(var(--morph-hue-1) 85% 66% / 0.34);
-  --morph-border-2: hsla(var(--morph-hue-2) 85% 68% / 0.30);
+  --morph-surface: hsla(var(--morph-hue-1) 62% 14% / 0.80);
+  --morph-surface-deep: hsla(var(--morph-hue-3) 56% 10% / 0.88);
+  --morph-border: hsla(var(--morph-hue-1) 88% 68% / 0.48);
+  --morph-border-2: hsla(var(--morph-hue-2) 88% 70% / 0.44);
 }
 
 @supports (background: linear-gradient(in oklab, white, black)) {
@@ -167,36 +167,36 @@ body {
   color: transparent;
 }
 
-/* Solarpunk Liquid-Crystal Glass Surfaces (adaptive tint, guaranteed dark legibility) */
+/* Solarpunk Liquid-Crystal Glass Surfaces (vivid sound-adaptive tint, guaranteed legibility) */
 .quantum-glass {
   background: linear-gradient(
     158deg var(--in-oklab),
-    hsla(var(--morph-hue-1) 34% 9% / 0.78) 0%,
-    hsla(var(--morph-hue-3) 28% 5% / 0.88) 100%
+    hsla(var(--morph-hue-1) 66% 16% / 0.78) 0%,
+    hsla(var(--morph-hue-3) 58% 11% / 0.86) 100%
   );
-  backdrop-filter: blur(22px) saturate(145%);
-  -webkit-backdrop-filter: blur(22px) saturate(145%);
-  border: 1px solid hsla(var(--morph-hue-1) 82% 68% / 0.24);
+  backdrop-filter: blur(22px) saturate(155%);
+  -webkit-backdrop-filter: blur(22px) saturate(155%);
+  border: 1px solid hsla(var(--morph-hue-1) 88% 66% / 0.42);
   box-shadow:
     0 20px 50px -15px rgba(0, 0, 0, 0.78),
-    0 0 32px -12px hsla(var(--morph-hue-1) 90% 60% / var(--morph-glow-alpha)),
-    inset 0 1px 0 hsla(var(--morph-hue-2) 90% 85% / 0.14);
+    0 0 38px -10px hsla(var(--morph-hue-1) 92% 60% / var(--morph-glow-alpha)),
+    inset 0 1px 0 hsla(var(--morph-hue-2) 92% 85% / 0.22);
 }
 
 .quantum-glass-gold {
   background: linear-gradient(
     155deg var(--in-oklab),
-    hsla(var(--morph-hue-2) 30% 10% / 0.78) 0%,
-    hsla(var(--morph-hue-1) 28% 6% / 0.9) 55%,
-    hsla(var(--morph-hue-3) 30% 8% / 0.84) 100%
+    hsla(var(--morph-hue-2) 64% 17% / 0.80) 0%,
+    hsla(var(--morph-hue-1) 58% 12% / 0.88) 55%,
+    hsla(var(--morph-hue-3) 62% 14% / 0.84) 100%
   );
-  backdrop-filter: blur(24px) saturate(150%);
-  -webkit-backdrop-filter: blur(24px) saturate(150%);
-  border: 1px solid hsla(var(--morph-hue-2) 86% 68% / 0.30);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid hsla(var(--morph-hue-2) 90% 68% / 0.48);
   box-shadow:
     0 22px 55px -16px rgba(0, 0, 0, 0.84),
-    0 0 42px -12px hsla(var(--morph-hue-2) 90% 62% / var(--morph-glow-alpha)),
-    inset 0 1px 0 hsla(var(--morph-hue-1) 90% 82% / 0.18);
+    0 0 46px -10px hsla(var(--morph-hue-2) 92% 62% / var(--morph-glow-alpha)),
+    inset 0 1px 0 hsla(var(--morph-hue-1) 92% 82% / 0.24);
 }
 
 .quantum-glass-centered {
@@ -212,65 +212,67 @@ body {
   position: relative;
   border: 1px solid transparent;
   background:
-    linear-gradient(160deg, hsla(var(--morph-hue-1) 30% 8% / 0.84), hsla(var(--morph-hue-3) 28% 5% / 0.90)) padding-box,
+    linear-gradient(160deg, hsla(var(--morph-hue-1) 64% 15% / 0.82), hsla(var(--morph-hue-3) 56% 10% / 0.88)) padding-box,
     linear-gradient(
       135deg var(--in-oklch),
-      hsla(var(--morph-hue-1) 92% 68% / 0.55),
-      hsla(var(--morph-hue-2) 90% 72% / 0.45),
-      hsla(var(--morph-hue-3) 92% 68% / 0.55)
+      hsla(var(--morph-hue-1) 94% 68% / 0.78),
+      hsla(var(--morph-hue-2) 92% 72% / 0.70),
+      hsla(var(--morph-hue-3) 94% 68% / 0.78)
     ) border-box;
   box-shadow:
     0 20px 55px -16px rgba(0, 0, 0, 0.82),
-    0 0 36px -14px hsla(var(--morph-hue-1) 95% 64% / var(--morph-glow-alpha)),
-    inset 0 1px 0 hsla(0 0% 100% / 0.14);
+    0 0 42px -12px hsla(var(--morph-hue-1) 95% 64% / var(--morph-glow-alpha)),
+    inset 0 1px 0 hsla(0 0% 100% / 0.18);
 }
 
 /* Morphologic Interactive Buttons & Navigation States with WCAG High Contrast */
 .morph-btn-primary {
   background: linear-gradient(
     130deg var(--in-oklch),
-    hsl(var(--morph-hue-1) 82% 42%) 0%,
-    hsl(var(--morph-hue-2) 80% 45%) 100%
+    hsl(var(--morph-hue-1) 86% 45%) 0%,
+    hsl(var(--morph-hue-2) 84% 48%) 100%
   );
   color: var(--morph-on-accent);
-  border: 1px solid hsla(var(--morph-hue-1) 95% 78% / 0.45);
+  border: 1px solid hsla(var(--morph-hue-1) 95% 78% / 0.62);
   box-shadow:
-    0 8px 28px -6px hsla(var(--morph-hue-1) 92% 55% / 0.45),
-    inset 0 1px 0 hsla(0 0% 100% / 0.28);
+    0 8px 28px -6px hsla(var(--morph-hue-1) 94% 56% / 0.52),
+    inset 0 1px 0 hsla(0 0% 100% / 0.30);
   transition: transform 0.2s ease, filter 0.2s ease, box-shadow 0.2s ease;
 }
 
 .morph-btn-primary:hover {
   filter: brightness(1.1);
   box-shadow:
-    0 12px 34px -6px hsla(var(--morph-hue-2) 92% 58% / 0.55),
-    inset 0 1px 0 hsla(0 0% 100% / 0.36);
+    0 12px 34px -6px hsla(var(--morph-hue-2) 94% 60% / 0.62),
+    inset 0 1px 0 hsla(0 0% 100% / 0.38);
 }
 
 .morph-btn-glass {
-  background: hsla(var(--morph-hue-1) 36% 12% / 0.72);
+  background: hsla(var(--morph-hue-1) 68% 20% / 0.80);
   color: #f8fafc;
-  border: 1px solid hsla(var(--morph-hue-1) 85% 68% / 0.35);
-  box-shadow: inset 0 1px 0 hsla(var(--morph-hue-2) 88% 82% / 0.12);
+  border: 1px solid hsla(var(--morph-hue-1) 90% 68% / 0.52);
+  box-shadow:
+    0 4px 18px -6px hsla(var(--morph-hue-1) 90% 56% / 0.35),
+    inset 0 1px 0 hsla(var(--morph-hue-2) 90% 84% / 0.18);
   transition: all 0.2s ease;
 }
 
 .morph-btn-glass:hover {
-  background: hsla(var(--morph-hue-1) 46% 18% / 0.84);
-  border-color: hsla(var(--morph-hue-2) 92% 72% / 0.58);
+  background: hsla(var(--morph-hue-1) 76% 28% / 0.88);
+  border-color: hsla(var(--morph-hue-2) 94% 72% / 0.72);
 }
 
 .morph-tab-active {
   background: linear-gradient(
     125deg var(--in-oklch),
-    hsla(var(--morph-hue-1) 76% 42% / 0.36) 0%,
-    hsla(var(--morph-hue-2) 76% 44% / 0.32) 100%
+    hsla(var(--morph-hue-1) 82% 45% / 0.46) 0%,
+    hsla(var(--morph-hue-2) 82% 46% / 0.42) 100%
   );
   color: #ffffff;
-  border: 1px solid hsla(var(--morph-hue-1) 92% 72% / 0.55);
+  border: 1px solid hsla(var(--morph-hue-1) 94% 72% / 0.72);
   box-shadow:
-    0 0 24px -6px hsla(var(--morph-hue-1) 95% 62% / 0.48),
-    inset 0 1px 0 hsla(0 0% 100% / 0.22);
+    0 0 28px -4px hsla(var(--morph-hue-1) 95% 62% / 0.56),
+    inset 0 1px 0 hsla(0 0% 100% / 0.26);
 }
 
 .morph-accent-text {
@@ -282,9 +284,9 @@ body {
 }
 
 .morph-pill {
-  background: hsla(var(--morph-hue-1) 44% 14% / 0.78);
+  background: hsla(var(--morph-hue-1) 68% 20% / 0.82);
   color: var(--morph-text-accent);
-  border: 1px solid hsla(var(--morph-hue-1) 88% 68% / 0.36);
+  border: 1px solid hsla(var(--morph-hue-1) 90% 68% / 0.52);
 }
 
 .sacred-grid-aura {

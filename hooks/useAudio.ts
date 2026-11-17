@@ -207,14 +207,24 @@ export const useAudio = () => {
   };
 
   const toggleMasterPlay = async () => {
+    const wasInitialized = !!audioCtxRef.current;
     initAudio();
     if (!audioCtxRef.current) return;
+
+    if (!wasInitialized) {
+      if (audioCtxRef.current.state === 'suspended') {
+        await audioCtxRef.current.resume();
+      }
+      setIsPlaying(audioCtxRef.current.state === 'running');
+      return;
+    }
 
     if (audioCtxRef.current.state === 'suspended') {
       await audioCtxRef.current.resume();
     } else if (audioCtxRef.current.state === 'running') {
       await audioCtxRef.current.suspend();
     }
+    setIsPlaying(audioCtxRef.current.state === 'running');
   };
 
   const addOscillator = (initialState?: Partial<OscillatorState>) => {

@@ -29,7 +29,7 @@ const DEFAULT_CONFIG: SpiralConfig = {
   thickness: 2.0,
   opacity: 0.8,
   unifiedMode: true,
-  colorPalette: 'holographic',
+  colorPalette: 'bw',
   depthMode: false,
   depthSpeed: 1.0,
   baseFrequencyRef: 432,
@@ -68,6 +68,7 @@ const SACRED_GEOMETRY_OPTIONS: { id: SacredGeometryMode; label: string }[] = [
 ];
 
 const PALETTE_OPTIONS: { id: CymaticsPalette; label: string }[] = [
+  { id: 'bw', label: 'Blanco y Negro' },
   { id: 'holographic', label: 'Holográfico' },
   { id: 'quantum', label: 'Quantum Blue' },
   { id: 'neon', label: 'Neon Magenta' },
@@ -205,6 +206,8 @@ export const SpiralVisualizer: React.FC<Props> = ({
   const logicalSizeRef = useRef({ width: 640, height: 420, dpr: 1 });
 
   const isDraggingRef = useRef(false);
+  const dragMovedRef = useRef(false);
+  const downPosRef = useRef({ x: 0, y: 0 });
   const lastPointerXRef = useRef(0);
   const pinchDistRef = useRef<number | null>(null);
   const wasNativeFullscreenRef = useRef(false);
@@ -284,12 +287,13 @@ export const SpiralVisualizer: React.FC<Props> = ({
       case 'neon': return ['#f472b6', '#ec4899'];
       case 'aurora': return ['#34d399', '#10b981'];
       case 'gold': return ['#fbbf24', '#f59e0b'];
-      case 'holographic':
-      default: return ['#22d3ee', '#a855f7'];
+      case 'holographic': return ['#22d3ee', '#a855f7'];
+      case 'bw':
+      default: return ['#ffffff', '#e2e8f0'];
     }
   };
 
-  // ResizeObserver, DPR scaling, Wheel zoom, and Render loop
+  // Smooth 1:1 Canvas Sizing & Original Complex Plane Render Loop (no wheel scroll trap)
   useEffect(() => {
     const canvas = canvasRef.current;
     const container = canvasContainerRef.current;
@@ -299,30 +303,18 @@ export const SpiralVisualizer: React.FC<Props> = ({
     if (!ctx) return;
 
     const updateCanvasSize = () => {
-      const rect = container.getBoundingClientRect();
-      const width = Math.max(1, Math.floor(rect.width));
-      const heightPx = Math.max(1, Math.floor(rect.height));
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-
-      const targetW = Math.floor(width * dpr);
-      const targetH = Math.floor(heightPx * dpr);
-      if (canvas.width !== targetW || canvas.height !== targetH) {
-        canvas.width = targetW;
-        canvas.height = targetH;
+      const width = Math.max(1, container.clientWidth);
+      const heightPx = Math.max(1, container.clientHeight);
+      if (canvas.width !== width || canvas.height !== heightPx) {
+        canvas.width = width;
+        canvas.height = heightPx;
       }
-      logicalSizeRef.current = { width, height: heightPx, dpr };
+      logicalSizeRef.current = { width, height: heightPx, dpr: 1 };
     };
 
     updateCanvasSize();
     const resizeObserver = new ResizeObserver(() => updateCanvasSize());
     resizeObserver.observe(container);
-
-    const handleWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      const delta = -e.deltaY * 0.0014;
-      setViewZoom(prev => Math.min(3.5, Math.max(0.35, Number((prev + delta).toFixed(3)))));
-    };
-    container.addEventListener('wheel', handleWheel, { passive: false });
 
     let animFrameId: number;
     let fftData = new Uint8Array(256);
@@ -346,15 +338,19 @@ export const SpiralVisualizer: React.FC<Props> = ({
             panZ: 0,
             isPlaying: isMasterPlayingRef.current,
             isIndependent: false,
-            color: '#22d3ee',
+            color: '#ffffff',
           }));
 
       if (currentAnalyser && currentAnalyser.frequencyBinCount !== fftData.length) {
         fftData = new Uint8Array(currentAnalyser.frequencyBinCount);
       }
 
-      const { width, height: hPx, dpr } = logicalSizeRef.current;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      if (canvas.width !== container.clientWidth || canvas.height !== container.clientHeight) {
+        updateCanvasSize();
+      }
+
+      const { width, height: hPx } = logicalSizeRef.current;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
 
       const cx = width / 2;
       const cy = hPx / 2;
@@ -372,9 +368,9 @@ export const SpiralVisualizer: React.FC<Props> = ({
 
       const primaryFreq = effectiveOscs.length > 0 ? effectiveOscs[0].frequency : 432;
       if (!hasPlaying || !isMasterPlayingRef.current) {
-        smoothedVolRef.current += (0 - smoothedVolRef.current) * 0.1;
+        smoothedVolRef.current = 0;
       } else {
-        smoothedVolRef.current += (audioAmp - smoothedVolRef.current) * 0.12;
+        smoothedVolRef.current += (audioAmp - smoothedVolRef.current) * 0.1;
       }
       smoothedFreqRef.current += (primaryFreq - smoothedFreqRef.current) * 0.1;
 
@@ -386,7 +382,6 @@ export const SpiralVisualizer: React.FC<Props> = ({
       const smoothedVol = smoothedVolRef.current;
       const smoothedFreq = smoothedFreqRef.current;
 
-      // Clean dark trail (default classic look) or fully transparent canvas for 3D showcase
       if (transparentBgRef.current) {
         ctx.clearRect(0, 0, width, hPx);
       } else {
@@ -395,12 +390,8 @@ export const SpiralVisualizer: React.FC<Props> = ({
       }
 
       const colors = getPaletteColors(currentConfig.colorPalette);
-      const isHeroTransparent = transparentBgRef.current;
-      // In backgroundless single-frame clearRect mode, cap iterations to 1800 and crisp zoom so 528Hz / arbitrary angles reveal delicate vortex arms cleanly instead of solid dense fill
-      const iter = isHeroTransparent
-        ? Math.min(1800, Math.max(100, currentConfig.iter))
-        : Math.max(100, currentConfig.iter);
-      const baseZoom = (isHeroTransparent ? currentConfig.zoom * 1.8 : currentConfig.zoom) * viewZoomRef.current;
+      const iter = Math.max(100, currentConfig.iter);
+      const baseZoom = currentConfig.zoom * viewZoomRef.current;
       const manualRot = manualRotationRef.current;
 
       const drawSpiral = (
@@ -411,20 +402,16 @@ export const SpiralVisualizer: React.FC<Props> = ({
         isUnified: boolean
       ) => {
         let k = currentConfig.k * (osc?.crestValleyRatio ?? 1.0);
-        if (isHeroTransparent) {
-          k = Math.max(1.0035, k);
-        }
         if (currentConfig.autoPilot && hasPlaying) {
-          k = (isHeroTransparent ? 1.004 : 1.002) + Math.sin(time * 0.1) * 0.004 + vol * 0.004;
+          k = 1.002 + (Math.sin(time * 0.1) * 0.005) + (vol * 0.005);
         }
-        k = Math.max(0.5, Math.min(1.5, k));
 
         const angleMult = currentConfig.angleMultiplier * (osc?.dutyCycle ? 1.0 + osc.dutyCycle : 1.0);
         const psi = (freq * Math.PI / 180) * angleMult;
         const rotReal = Math.cos(psi);
         const rotImag = Math.sin(psi);
 
-        const z0_r = currentConfig.z0_r !== 0 ? currentConfig.z0_r : 1.0 + vol * 0.45;
+        const z0_r = currentConfig.z0_r !== 0 ? currentConfig.z0_r : 1.0 + (vol * 0.5);
         const z0_i = currentConfig.z0_i !== 0 ? currentConfig.z0_i : 0.0;
 
         let zReal = z0_r;
@@ -443,7 +430,7 @@ export const SpiralVisualizer: React.FC<Props> = ({
 
         ctx.save();
         ctx.translate(cx, cy);
-        ctx.rotate(manualRot);
+        if (manualRot !== 0) ctx.rotate(manualRot);
 
         const currentZoom = baseZoom * minDim;
 
@@ -459,13 +446,14 @@ export const SpiralVisualizer: React.FC<Props> = ({
           }
           ctx.rotate(rotationOffset);
         } else if (currentConfig.depthMode) {
-          const zF = 1 + ((time * currentConfig.depthSpeed) % 12);
+          const zF = 1 + ((time * currentConfig.depthSpeed) % 15);
           ctx.scale(zF, zF);
         }
 
         ctx.beginPath();
-        let moved = false;
-        const maxBound = isHeroTransparent ? minDim * 0.48 : Math.max(width, hPx) * 4;
+        const prevX = zReal * currentZoom;
+        const prevY = -zImag * currentZoom;
+        ctx.moveTo(prevX, prevY);
 
         for (let n = loopStart; n < loopEnd; n++) {
           const zrK = zReal * k;
@@ -480,30 +468,23 @@ export const SpiralVisualizer: React.FC<Props> = ({
 
           if (currentConfig.waveStyle) {
             const wavePhase = n * 0.1 + time * (freq / 100);
-            const mag = Math.hypot(zReal, zImag) || 1;
+            const mag = Math.sqrt(zReal * zReal + zImag * zImag) || 1;
             const nx = -zImag / mag;
             const ny = -zReal / mag;
-            const waveOffset = Math.sin(wavePhase) * currentConfig.waveAmplitude * 18 * (vol + 0.25);
+            const waveOffset = Math.sin(wavePhase) * currentConfig.waveAmplitude * 20 * (vol + 0.2);
             px += nx * waveOffset;
             py += ny * waveOffset;
           }
 
-          if (!Number.isFinite(px) || !Number.isFinite(py)) break;
-          if (Math.abs(px) > maxBound || Math.abs(py) > maxBound) {
+          if (!Number.isFinite(px) || !Number.isFinite(py) || Math.abs(px) > width * 5 || Math.abs(py) > hPx * 5) {
             if (n > 0) break;
-            continue;
           }
 
-          if (!moved) {
-            ctx.moveTo(px, py);
-            moved = true;
-          } else {
-            ctx.lineTo(px, py);
-          }
+          ctx.lineTo(px, py);
         }
 
         if (isUnified) {
-          const gradient = ctx.createLinearGradient(-minDim / 2, -minDim / 2, minDim / 2, minDim / 2);
+          const gradient = ctx.createLinearGradient(-width / 2, -hPx / 2, width / 2, hPx / 2);
           gradient.addColorStop(0, colors[0]);
           gradient.addColorStop(1, colors[1]);
           ctx.strokeStyle = gradient;
@@ -513,10 +494,12 @@ export const SpiralVisualizer: React.FC<Props> = ({
           ctx.shadowColor = baseColor;
         }
 
-        ctx.lineWidth = isHeroTransparent
-          ? Math.max(0.45, Math.min(1.4, (currentConfig.thickness + vol * 1.4) * 0.34))
-          : Math.max(0.28, (currentConfig.thickness + vol * 2.2) * (0.14 + currentConfig.illumination * 0.45));
-        ctx.shadowBlur = currentConfig.illumination > 0 ? (10 + vol * 30) * currentConfig.illumination : 0;
+        ctx.lineWidth = (currentConfig.thickness + (vol * 3)) * Math.max(0.01, currentConfig.illumination);
+        if (currentConfig.illumination > 0) {
+          ctx.shadowBlur = (10 + vol * 30) * currentConfig.illumination;
+        } else {
+          ctx.shadowBlur = 0;
+        }
         ctx.globalAlpha = currentConfig.opacity;
         ctx.stroke();
 
@@ -632,18 +615,22 @@ export const SpiralVisualizer: React.FC<Props> = ({
     return () => {
       cancelAnimationFrame(animFrameId);
       resizeObserver.disconnect();
-      container.removeEventListener('wheel', handleWheel);
     };
   }, [isFullscreen]);
 
   // Interactive Mouse & Touch Canvas Controls (Drag rotation + Pinch zoom)
   const handleMouseDown = (e: React.MouseEvent) => {
     isDraggingRef.current = true;
+    dragMovedRef.current = false;
+    downPosRef.current = { x: e.clientX, y: e.clientY };
     lastPointerXRef.current = e.clientX;
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!isDraggingRef.current) return;
+    if (Math.hypot(e.clientX - downPosRef.current.x, e.clientY - downPosRef.current.y) > 8) {
+      dragMovedRef.current = true;
+    }
     const dx = e.clientX - lastPointerXRef.current;
     lastPointerXRef.current = e.clientX;
     setManualRotation(prev => prev + dx * 0.008);
@@ -659,16 +646,22 @@ export const SpiralVisualizer: React.FC<Props> = ({
   const handleTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length === 1) {
       isDraggingRef.current = true;
+      dragMovedRef.current = false;
+      downPosRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
       pinchDistRef.current = null;
       lastPointerXRef.current = e.touches[0].clientX;
     } else if (e.touches.length === 2) {
       isDraggingRef.current = false;
+      dragMovedRef.current = true;
       pinchDistRef.current = getTouchDist(e.touches[0], e.touches[1]);
     }
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (e.touches.length === 1 && isDraggingRef.current) {
+      if (Math.hypot(e.touches[0].clientX - downPosRef.current.x, e.touches[0].clientY - downPosRef.current.y) > 8) {
+        dragMovedRef.current = true;
+      }
       const dx = e.touches[0].clientX - lastPointerXRef.current;
       lastPointerXRef.current = e.touches[0].clientX;
       setManualRotation(prev => prev + dx * 0.01);
@@ -944,10 +937,15 @@ export const SpiralVisualizer: React.FC<Props> = ({
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
+      onClick={() => {
+        if (fullscreenMode && !dragMovedRef.current && !showFullscreenControls) {
+          setShowFullscreenControls(true);
+        }
+      }}
     >
       <canvas ref={canvasRef} className="w-full h-full block pointer-events-auto bg-transparent" />
 
-      {!transparentBg && (
+      {!transparentBg && !fullscreenMode && (
         <>
           {/* Equation Pill */}
           <div className="absolute bottom-3 left-3 right-28 sm:right-auto pointer-events-none">
@@ -961,6 +959,7 @@ export const SpiralVisualizer: React.FC<Props> = ({
             className="absolute bottom-3 right-3 z-10 flex items-center gap-1 bg-black/70 backdrop-blur-md border border-white/15 rounded-xl p-1 pointer-events-auto"
             onMouseDown={(e) => e.stopPropagation()}
             onTouchStart={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
           >
             <button
               onClick={() => setViewZoom(prev => Math.max(0.35, Number((prev - 0.15).toFixed(2))))}
@@ -989,73 +988,48 @@ export const SpiralVisualizer: React.FC<Props> = ({
     </div>
   );
 
-  // Fullscreen Portal View
+  // Fullscreen Portal View — Zero visible overlays until user clicks/taps screen
   if (isFullscreen && typeof document !== 'undefined') {
     const primaryFreq = activeOscillators[0]?.frequency ?? activeFrequencies?.[0] ?? 432;
     return createPortal(
       <div className="fixed inset-0 z-[99999] w-screen h-[100dvh] bg-black flex flex-col overflow-hidden select-none">
         {renderInteractiveCanvasSurface(true)}
 
-        {/* Always-Visible Floating Top HUD Bar */}
-        <div className="fixed top-3 left-0 right-0 z-30 flex items-center justify-center sm:justify-between px-3 sm:px-6 pointer-events-none">
-          <div className="hidden sm:flex items-center gap-2.5 bg-black/65 backdrop-blur-xl border border-white/15 px-3.5 py-2 rounded-2xl pointer-events-auto shadow-xl">
-            <Icon name="Aperture" size={16} className="text-purple-400" />
-            <span className="text-xs font-display font-bold text-white tracking-wider">Espiral Holográfica</span>
-            <span className="text-[10px] font-mono text-purple-300 bg-purple-500/15 border border-purple-500/30 px-2 py-0.5 rounded-lg">
-              {primaryFreq.toFixed(1)} Hz
-            </span>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-center gap-2 bg-black/70 backdrop-blur-xl border border-white/15 p-1.5 rounded-2xl pointer-events-auto shadow-[0_8px_30px_rgba(0,0,0,0.85)]">
-            <button
-              onClick={() => setShowFullscreenControls(prev => !prev)}
-              className={`px-3 sm:px-4 py-2 rounded-xl text-[10px] sm:text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 border transition-all ${showFullscreenControls
-                ? 'bg-purple-500/25 border-purple-400/60 text-purple-200'
-                : 'bg-white/5 border-white/10 text-slate-200 hover:bg-white/15'
-                }`}
-            >
-              <Icon name="Sliders" size={14} />
-              <span>{showFullscreenControls ? 'Ocultar Ajustes' : 'Abrir Ajustes'}</span>
-            </button>
-
-            <button
-              onClick={exitFullscreen}
-              className="px-3 sm:px-4 py-2 rounded-xl text-[10px] sm:text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 bg-red-500/25 hover:bg-red-500/40 border border-red-400/50 text-red-100 transition-all shadow-[0_0_15px_rgba(239,68,68,0.25)]"
-            >
-              <Icon name="Minimize2" size={14} />
-              <span>Salir Pantalla Completa (Esc)</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Centered Floating Settings Modal */}
+        {/* Centered Modal revealed only when user taps/clicks screen */}
         {showFullscreenControls && (
-          <div className="fixed inset-0 z-20 flex items-center justify-center p-3 sm:p-6 pt-20 pb-6 pointer-events-none">
+          <div
+            className="fixed inset-0 z-30 flex items-center justify-center p-3 sm:p-6 bg-black/55 backdrop-blur-sm"
+            onClick={() => setShowFullscreenControls(false)}
+          >
             <div
-              className="pointer-events-auto w-full max-w-4xl max-h-[80dvh] overflow-y-auto custom-scrollbar mx-auto my-auto bg-black/85 backdrop-blur-2xl border border-purple-500/30 p-4 sm:p-6 rounded-3xl shadow-[0_0_80px_rgba(0,0,0,0.95)] flex flex-col gap-5"
+              className="w-full max-w-4xl max-h-[84dvh] overflow-y-auto custom-scrollbar mx-auto my-auto bg-black/90 backdrop-blur-2xl border border-purple-500/35 p-4 sm:p-6 rounded-3xl shadow-[0_0_80px_rgba(0,0,0,0.95)] flex flex-col gap-5"
               onMouseDown={(e) => e.stopPropagation()}
               onTouchStart={(e) => e.stopPropagation()}
               onWheel={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
             >
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-3">
                 <div className="flex items-center gap-2.5">
-                  <Icon name="Settings" size={18} className="text-purple-400" />
-                  <h3 className="text-purple-300 font-display font-bold uppercase tracking-widest text-xs sm:text-sm">
-                    Ajustes de Espiral Holográfica y Geometría Sagrada
+                  <Icon name="Aperture" size={18} className="text-purple-400" />
+                  <h3 className="text-purple-200 font-display font-bold uppercase tracking-widest text-xs sm:text-sm">
+                    Espiral Holográfica
                   </h3>
+                  <span className="text-[10px] font-mono text-purple-300 bg-purple-500/15 border border-purple-500/30 px-2 py-0.5 rounded-lg">
+                    {primaryFreq.toFixed(1)} Hz
+                  </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setShowFullscreenControls(false)}
-                    className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/15 border border-white/10 text-slate-300 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1"
+                    className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-slate-100 text-[10px] sm:text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors"
                   >
-                    <Icon name="EyeOff" size={12} /> Ocultar
+                    <Icon name="EyeOff" size={13} /> Ocultar Menú
                   </button>
                   <button
                     onClick={exitFullscreen}
-                    className="px-3 py-1.5 rounded-xl bg-red-500/20 hover:bg-red-500/35 border border-red-500/40 text-red-200 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1"
+                    className="px-3.5 py-2 rounded-xl bg-red-500/25 hover:bg-red-500/40 border border-red-400/50 text-red-100 text-[10px] sm:text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors"
                   >
-                    <Icon name="X" size={12} /> Salir (Esc)
+                    <Icon name="Minimize2" size={13} /> Salir de Pantalla Completa
                   </button>
                 </div>
               </div>

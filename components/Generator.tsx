@@ -211,14 +211,14 @@ const Generator: React.FC<Props> = ({
   return (
     <div className="animate-fade-in space-y-6 pb-24">
       {/* --- Toolbar --- */}
-      <div className="flex flex-col items-center justify-center gap-5 bg-black/60 border border-white/10 p-4 sm:p-6 rounded-3xl backdrop-blur-2xl shadow-[0_10px_40px_rgba(0,0,0,0.8),inset_0_0_20px_rgba(255,255,255,0.05)] relative">
+      <div className="flex flex-col items-center justify-center gap-5 art-nouveau-frame p-4 sm:p-6 rounded-3xl relative">
         <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 relative z-10 w-full">
           <button
             onClick={audio.toggleMasterPlay}
-            className={`group relative flex items-center justify-center w-full sm:w-16 h-14 sm:h-16 rounded-2xl transition-all duration-300 border-2 shadow-[0_0_20px_rgba(0,0,0,0.5)] ${
+            className={`group relative flex items-center justify-center w-full sm:w-16 h-14 sm:h-16 rounded-2xl transition-all duration-300 ${
               audio.isPlaying
-                ? 'bg-cyan-500 text-black border-cyan-300 shadow-[0_0_30px_rgba(34,211,238,0.6)] scale-[1.02]'
-                : 'bg-black/80 text-cyan-400 border-cyan-500/50 hover:border-cyan-400 hover:bg-cyan-950/50'
+                ? 'morph-btn-primary scale-[1.02]'
+                : 'morph-btn-glass morph-accent-text'
             }`}
             title={audio.isPlaying ? 'Pausar Todo' : 'Reproducir Todo'}
           >
@@ -344,32 +344,32 @@ const Generator: React.FC<Props> = ({
       )}
 
       {/* --- ESPECTRÓMETRO (No overflow-hidden so Portals/Visualizers adapt freely) --- */}
-      <div className="relative p-4 sm:p-6 rounded-3xl border border-white/10 bg-black/60 backdrop-blur-2xl shadow-[0_10px_40px_rgba(0,0,0,0.8),inset_0_0_20px_rgba(255,255,255,0.05)] space-y-5">
+      <div className="relative p-4 sm:p-6 rounded-3xl art-nouveau-frame space-y-5">
         <div className="flex flex-col items-center text-center gap-4 border-b border-white/10 pb-5">
           {/* Centered Spectrometer Title & Mode Tabs */}
           <div className="flex flex-col items-center gap-3 w-full">
             <div className="flex items-center justify-center gap-3">
-              <div className="p-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/30 shadow-[inset_0_0_15px_rgba(34,211,238,0.2)]">
-                <Icon name="Activity" size={22} className="text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]" />
+              <div className="p-2.5 rounded-xl morph-pill">
+                <Icon name="Activity" size={22} className="morph-accent-text" />
               </div>
               <div>
-                <h2 className="text-xl sm:text-2xl font-display font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-white to-purple-300 tracking-wide">
+                <h2 className="text-xl sm:text-2xl font-display font-black starseed-text-gradient tracking-wide">
                   Espectrómetro
                 </h2>
-                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">
+                <p className="text-[10px] text-slate-300 uppercase tracking-widest font-bold">
                   Análisis de Interferencia Constructiva, Diferenciales de Frecuencia (Δf) y Coherencia de Fase
                 </p>
               </div>
             </div>
 
             {/* Spectrometer Tabs */}
-            <div className="flex flex-wrap items-center justify-center gap-1.5 bg-black/55 p-1.5 rounded-2xl border border-white/10">
+            <div className="flex flex-wrap items-center justify-center gap-1.5 quantum-glass p-1.5 rounded-2xl">
               <button
                 onClick={() => onVizTabChange && onVizTabChange('2d')}
                 className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
                   activeVizTab === '2d'
-                    ? 'bg-cyan-500/20 text-cyan-200 border border-cyan-400/50 shadow-[0_0_12px_rgba(34,211,238,0.25)]'
-                    : 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent'
+                    ? 'morph-tab-active'
+                    : 'text-slate-300 hover:text-white hover:bg-white/10 border border-transparent'
                 }`}
               >
                 <Icon name="Activity" size={14} />
@@ -379,8 +379,8 @@ const Generator: React.FC<Props> = ({
                 onClick={() => onVizTabChange && onVizTabChange('3d')}
                 className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
                   activeVizTab === '3d'
-                    ? 'bg-purple-500/20 text-purple-200 border border-purple-400/50 shadow-[0_0_12px_rgba(168,85,247,0.25)]'
-                    : 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent'
+                    ? 'morph-tab-active'
+                    : 'text-slate-300 hover:text-white hover:bg-white/10 border border-transparent'
                 }`}
               >
                 <Icon name="Hexagon" size={14} />
@@ -390,8 +390,8 @@ const Generator: React.FC<Props> = ({
                 onClick={() => onVizTabChange && onVizTabChange('spiral')}
                 className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
                   activeVizTab === 'spiral'
-                    ? 'bg-pink-500/20 text-pink-200 border border-pink-400/50 shadow-[0_0_12px_rgba(236,72,153,0.25)]'
-                    : 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent'
+                    ? 'morph-tab-active'
+                    : 'text-slate-300 hover:text-white hover:bg-white/10 border border-transparent'
                 }`}
               >
                 <Icon name="Aperture" size={14} />

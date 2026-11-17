@@ -78,9 +78,9 @@ export const LiquidCrystalBackground: React.FC<LiquidCrystalBackgroundProps> = (
 
       // 1. Deep chromatic crystal substrate (preserves high legibility while richly colored)
       const baseGrad = ctx.createLinearGradient(0, 0, width, height);
-      baseGrad.addColorStop(0, `hsl(${h1.toFixed(0)}, 52%, ${(8 + s.energy * 2.5).toFixed(1)}%)`);
-      baseGrad.addColorStop(0.5, `hsl(${h3.toFixed(0)}, 46%, ${(6 + s.energy * 2).toFixed(1)}%)`);
-      baseGrad.addColorStop(1, `hsl(${h2.toFixed(0)}, 54%, ${(8 + s.energy * 2.5).toFixed(1)}%)`);
+      baseGrad.addColorStop(0, `hsl(${h1.toFixed(0)}, 64%, ${(11 + s.energy * 4.5).toFixed(1)}%)`);
+      baseGrad.addColorStop(0.5, `hsl(${h3.toFixed(0)}, 56%, ${(8 + s.energy * 3.5).toFixed(1)}%)`);
+      baseGrad.addColorStop(1, `hsl(${h2.toFixed(0)}, 66%, ${(11 + s.energy * 4.5).toFixed(1)}%)`);
       ctx.globalCompositeOperation = 'source-over';
       ctx.fillStyle = baseGrad;
       ctx.fillRect(0, 0, width, height);
@@ -96,11 +96,11 @@ export const LiquidCrystalBackground: React.FC<LiquidCrystalBackgroundProps> = (
           width * (0.5 + 0.36 * Math.sin(t * node.freqX + node.phaseX) * Math.cos(t * 0.07 + i));
         const cy =
           height * (0.5 + 0.38 * Math.cos(t * node.freqY + node.phaseY) * Math.sin(t * 0.05 + i * PHI));
-        const pulse = 1 + s.energy * 0.1 * Math.sin(t * 0.8 + i);
+        const pulse = 1 + s.energy * 0.14 * Math.sin(t * 0.8 + i);
         const r = maxDim * node.radiusRatio * pulse;
 
         const nodeHue = (hues[node.hueSlot - 1] + Math.sin(t * 0.15 + i) * 10 + 360) % 360;
-        const alpha = Math.min(0.46, node.alpha + s.energy * 0.08);
+        const alpha = Math.min(0.58, node.alpha + s.energy * 0.16);
 
         const grad = ctx.createRadialGradient(cx, cy, r * 0.04, cx, cy, r);
         grad.addColorStop(0, `hsla(${nodeHue.toFixed(0)}, ${node.sat}%, ${node.light + 8}%, ${alpha.toFixed(3)})`);

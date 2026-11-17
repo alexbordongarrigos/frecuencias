@@ -38,7 +38,7 @@ function hslLuminance(h: number, s: number, l: number): number {
 }
 
 // Shortest-path circular hue interpolation (0..360) with calm angular velocity cap
-function lerpHue(current: number, target: number, alpha: number, maxStep = 0.35): number {
+function lerpHue(current: number, target: number, alpha: number, maxStep = 1.8): number {
   const diff = ((target - current + 540) % 360) - 180;
   const rawStep = diff * alpha;
   const step = Math.max(-maxStep, Math.min(maxStep, rawStep));
@@ -53,15 +53,16 @@ function safeNeonTextLightness(hue: number): number {
   return 72;
 }
 
-// Frequency (Hz) -> Harmonic Hue using log2 octave projection scaled by golden ratio
+// Frequency (Hz) -> Harmonic Hue with vivid octave dispersion anchored at 432 Hz -> 175°
 function frequencyToHue(hz: number, phaseOffset: number): number {
   const safeHz = Math.max(1, Math.min(22000, hz));
-  const octaveAngle = (Math.log2(safeHz) * 360 * (PHI - 1)) % 360;
-  return (octaveAngle + phaseOffset + 360) % 360;
+  const harmonicAngle = Math.log2(safeHz / 432) * 412 + 175;
+  return (((harmonicAngle + phaseOffset) % 360) + 360) % 360;
 }
 
 export function useChromaticMorph(
   oscillators: OscillatorState[],
+  isMasterPlaying: boolean,
   getPlayerAnalyser: () => AnalyserNode | null
 ): UseChromaticMorphReturn {
   const [micEnabled, setMicEnabled] = useState(false);
@@ -85,6 +86,9 @@ export function useChromaticMorph(
   const oscillatorsRef = useRef(oscillators);
   oscillatorsRef.current = oscillators;
 
+  const isMasterPlayingRef = useRef(isMasterPlaying);
+  isMasterPlayingRef.current = isMasterPlaying;
+
   const getPlayerAnalyserRef = useRef(getPlayerAnalyser);
   getPlayerAnalyserRef.current = getPlayerAnalyser;
 
@@ -92,8 +96,12 @@ export function useChromaticMorph(
   const micCtxRef = useRef<AudioContext | null>(null);
   const micAnalyserRef = useRef<AnalyserNode | null>(null);
   const micFreqBufRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
+  const micTimeBufRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
   const playerFreqBufRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
   const smoothedMicHzRef = useRef<number>(432);
+  const lastMicActiveTimeRef = useRef<number>(0);
+  const heldMicHzRef = useRef<number>(0);
+  const heldMicEnergyRef = useRef<number>(0);
 
   const stopMic = useCallback(() => {
     if (micStreamRef.current) {
@@ -106,6 +114,10 @@ export function useChromaticMorph(
     }
     micAnalyserRef.current = null;
     micFreqBufRef.current = null;
+    micTimeBufRef.current = null;
+    lastMicActiveTimeRef.current = 0;
+    heldMicHzRef.current = 0;
+    heldMicEnergyRef.current = 0;
     setMicActive(false);
     setMicEnabled(false);
   }, []);
@@ -148,13 +160,14 @@ export function useChromaticMorph(
       const source = ctx.createMediaStreamSource(stream);
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 2048;
-      analyser.smoothingTimeConstant = 0.94;
+      analyser.smoothingTimeConstant = 0.80;
       source.connect(analyser);
 
       micStreamRef.current = stream;
       micCtxRef.current = ctx;
       micAnalyserRef.current = analyser;
       micFreqBufRef.current = new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount));
+      micTimeBufRef.current = new Uint8Array(new ArrayBuffer(analyser.fftSize));
       setMicEnabled(true);
       setMicActive(true);
     } catch (err) {
@@ -186,8 +199,8 @@ export function useChromaticMorph(
       const textL1 = safeNeonTextLightness(s.hue1);
       const textL2 = safeNeonTextLightness(s.hue2);
 
-      // Compute safe foreground color on solid filled accent surfaces (L=44%)
-      const accentBgLum = hslLuminance(s.hue1, 82, 46);
+      // Compute safe foreground color on solid filled accent surfaces (L=45%, S=86%)
+      const accentBgLum = hslLuminance(s.hue1, 86, 45);
       const onAccent = accentBgLum > 0.34 ? '#050811' : '#f8fafc';
 
       root.setProperty('--morph-hue-1', h1);
@@ -206,8 +219,10 @@ export function useChromaticMorph(
     const tick = (now: number) => {
       const elapsedSec = (now - startTime) * 0.001;
 
-      // 1. Analyze active oscillators from synthesizer
-      const activeOscs = oscillatorsRef.current.filter((o) => o.isPlaying && !o.isMuted);
+      // 1. Analyze active oscillators from synthesizer (only when master player is actively playing)
+      const activeOscs = isMasterPlayingRef.current
+        ? oscillatorsRef.current.filter((o) => o.isPlaying && !o.isMuted)
+        : [];
       let oscWeightedHz = 0;
       let oscTotalWeight = 0;
       for (let i = 0; i < activeOscs.length; i++) {
@@ -221,7 +236,7 @@ export function useChromaticMorph(
       let playerEnergy = 0;
       let playerFftHz = 0;
       const playerAnalyser = getPlayerAnalyserRef.current?.();
-      if (playerAnalyser && activeOscs.length > 0) {
+      if (playerAnalyser && (isMasterPlayingRef.current || activeOscs.length > 0)) {
         if (!playerFreqBufRef.current || playerFreqBufRef.current.length !== playerAnalyser.frequencyBinCount) {
           playerFreqBufRef.current = new Uint8Array(new ArrayBuffer(playerAnalyser.frequencyBinCount));
         }
@@ -239,19 +254,21 @@ export function useChromaticMorph(
             maxIdx = i;
           }
         }
-        playerEnergy = Math.min(1, Math.sqrt(sumSq / Math.max(1, buf.length * 0.25)) * 1.8);
-        if (maxVal > 12) {
+        playerEnergy = Math.min(1, Math.sqrt(sumSq / Math.max(1, buf.length * 0.16)) * 2.2);
+        if (maxVal > 8) {
           playerFftHz = maxIdx * binHz;
         }
-      } else if (activeOscs.length > 0) {
-        playerEnergy = Math.min(1, oscTotalWeight / Math.max(1, activeOscs.length));
+      }
+      if (activeOscs.length > 0 && playerEnergy < 0.15) {
+        playerEnergy = Math.max(playerEnergy, Math.min(1, oscTotalWeight / Math.max(1, activeOscs.length)));
       }
 
-      // 3. Sample microphone FFT analyser if enabled
+      // 3. Sample microphone FFT & time-domain RMS analyser if enabled
       let micEnergy = 0;
       let micDominantHz = 0;
       const micAnalyser = micAnalyserRef.current;
       const micBuf = micFreqBufRef.current;
+      const micTimeBuf = micTimeBufRef.current;
       if (micAnalyser && micBuf) {
         micAnalyser.getByteFrequencyData(micBuf);
         const sampleRate = micCtxRef.current?.sampleRate || 48000;
@@ -260,12 +277,12 @@ export function useChromaticMorph(
         let weightedHz = 0;
         let maxMag = 0;
         let peakIdx = 0;
-        // Focus on 45 Hz .. 6000 Hz musical/vocal range
-        const minBin = Math.max(1, Math.floor(45 / binHz));
+        // Focus on 40 Hz .. 6000 Hz musical/vocal range
+        const minBin = Math.max(1, Math.floor(40 / binHz));
         const maxBin = Math.min(micBuf.length - 1, Math.ceil(6000 / binHz));
         for (let i = minBin; i <= maxBin; i++) {
           const v = micBuf[i] / 255;
-          if (v > 0.04) {
+          if (v > 0.02) {
             const p = v * v;
             sumEnergy += p;
             weightedHz += i * binHz * p;
@@ -275,11 +292,24 @@ export function useChromaticMorph(
             }
           }
         }
-        const rms = Math.min(1, Math.sqrt(sumEnergy / Math.max(1, (maxBin - minBin) * 0.08)) * 2.1);
-        if (rms > 0.035 && sumEnergy > 0.02) {
-          micEnergy = rms;
-          // Parabolic refinement around peak bin blended with spectral centroid
-          let peakHz = peakIdx * binHz;
+
+        let timeRms = 0;
+        if (micTimeBuf) {
+          micAnalyser.getByteTimeDomainData(micTimeBuf);
+          let tSum = 0;
+          for (let i = 0; i < micTimeBuf.length; i++) {
+            const norm = (micTimeBuf[i] - 128) / 128;
+            tSum += norm * norm;
+          }
+          timeRms = Math.sqrt(tSum / Math.max(1, micTimeBuf.length));
+        }
+
+        const fftRms = Math.min(1, Math.sqrt(sumEnergy / Math.max(1, (maxBin - minBin) * 0.06)) * 2.4);
+        const combinedMicRms = Math.min(1, Math.max(fftRms, timeRms * 3.5));
+
+        if (combinedMicRms > 0.015 && (sumEnergy > 0.004 || timeRms > 0.012)) {
+          micEnergy = combinedMicRms;
+          let peakHz = peakIdx > 0 ? peakIdx * binHz : smoothedMicHzRef.current;
           if (peakIdx > minBin && peakIdx < maxBin) {
             const left = micBuf[peakIdx - 1];
             const center = micBuf[peakIdx];
@@ -290,22 +320,30 @@ export function useChromaticMorph(
               peakHz = (peakIdx + Math.max(-0.5, Math.min(0.5, delta))) * binHz;
             }
           }
-          const centroidHz = weightedHz / sumEnergy;
-          const rawMicHz = peakHz * 0.65 + centroidHz * 0.35;
-          smoothedMicHzRef.current += (rawMicHz - smoothedMicHzRef.current) * 0.015;
+          const centroidHz = sumEnergy > 0 ? weightedHz / sumEnergy : peakHz;
+          const rawMicHz = peakIdx > 0 ? peakHz * 0.65 + centroidHz * 0.35 : centroidHz;
+          smoothedMicHzRef.current += (rawMicHz - smoothedMicHzRef.current) * 0.18;
           micDominantHz = smoothedMicHzRef.current;
+          lastMicActiveTimeRef.current = now;
+          heldMicHzRef.current = micDominantHz;
+          heldMicEnergyRef.current = micEnergy;
+        } else if (lastMicActiveTimeRef.current > 0 && now - lastMicActiveTimeRef.current < 4000 && heldMicHzRef.current > 0) {
+          // Hold mic chromatic tone gracefully between pauses/syllables for liquid calm UX
+          const decay = 1 - (now - lastMicActiveTimeRef.current) / 4000;
+          micDominantHz = heldMicHzRef.current;
+          micEnergy = heldMicEnergyRef.current * decay * 0.55;
         }
       }
 
       // 4. Derive calm, organic + audio-driven target hues using Solarpunk Solfeggio/Golden-Ratio progression
       const idlePhase =
-        (elapsedSec * 2.2 +
-          Math.sin(elapsedSec * 0.09) * 28 +
-          Math.cos(elapsedSec * 0.09 / PHI) * 18 +
-          168) %
+        (elapsedSec * 2.4 +
+          Math.sin(elapsedSec * 0.11) * 28 +
+          Math.cos(elapsedSec * 0.11 / PHI) * 18 +
+          175) %
         360;
 
-      const combinedEnergy = Math.min(1, Math.max(playerEnergy, micEnergy * 1.1) + Math.min(playerEnergy, micEnergy) * 0.25);
+      const combinedEnergy = Math.min(1, Math.max(playerEnergy, micEnergy * 1.15) + Math.min(playerEnergy, micEnergy) * 0.25);
       const effectivePlayerHz = oscCentroidHz > 0 ? oscCentroidHz : playerFftHz;
 
       let targetHz = stateRef.current.dominantHz;
@@ -313,15 +351,15 @@ export function useChromaticMorph(
 
       if (effectivePlayerHz > 0 && micDominantHz > 0) {
         const pWeight = Math.max(0.25, playerEnergy);
-        const mWeight = Math.max(0.25, micEnergy * 1.25);
+        const mWeight = Math.max(0.3, micEnergy * 1.3);
         targetHz = (effectivePlayerHz * pWeight + micDominantHz * mWeight) / (pWeight + mWeight);
-        targetHue1 = frequencyToHue(targetHz, Math.sin(elapsedSec * 0.12) * 8);
+        targetHue1 = frequencyToHue(targetHz, Math.sin(elapsedSec * 0.22) * 10);
       } else if (micDominantHz > 0) {
         targetHz = micDominantHz;
-        targetHue1 = frequencyToHue(targetHz, Math.sin(elapsedSec * 0.14) * 10);
+        targetHue1 = frequencyToHue(targetHz, Math.sin(elapsedSec * 0.24) * 12);
       } else if (effectivePlayerHz > 0) {
         targetHz = effectivePlayerHz;
-        targetHue1 = frequencyToHue(targetHz, elapsedSec * 1.6 + Math.sin(elapsedSec * 0.12) * 6);
+        targetHue1 = frequencyToHue(targetHz, Math.sin(elapsedSec * 0.20) * 8);
       } else {
         targetHz = 432 + Math.sin(elapsedSec * 0.15) * 48;
       }
@@ -339,16 +377,18 @@ export function useChromaticMorph(
       }
 
       // Golden-angle harmonic spread modulated calmly by harmonic ratio & energy
-      const harmonicSpreadShift = Math.sin(harmonicRatio * Math.PI) * (12 + combinedEnergy * 14);
+      const harmonicSpreadShift = Math.sin(harmonicRatio * Math.PI) * (14 + combinedEnergy * 16);
       const targetHue2 = (targetHue1 + GOLDEN_ANGLE + harmonicSpreadShift + 360) % 360;
       const targetHue3 = (targetHue1 + GOLDEN_ANGLE * PHI - harmonicSpreadShift * 0.5 + 360) % 360;
 
       const prev = stateRef.current;
-      const hueSmoothing = combinedEnergy > 0.06 ? 0.0065 : 0.0035;
-      const nextHue1 = lerpHue(prev.hue1, targetHue1, hueSmoothing, 0.35);
-      const nextHue2 = lerpHue(prev.hue2, targetHue2, hueSmoothing * 0.9, 0.32);
-      const nextHue3 = lerpHue(prev.hue3, targetHue3, hueSmoothing * 0.85, 0.30);
-      const nextEnergy = prev.energy + (Math.max(0.12, combinedEnergy) - prev.energy) * 0.025;
+      const isAudioActive = combinedEnergy > 0.04 || micDominantHz > 0 || effectivePlayerHz > 0;
+      const hueSmoothing = isAudioActive ? 0.045 : 0.012;
+      const maxStep = isAudioActive ? 1.85 : 0.35;
+      const nextHue1 = lerpHue(prev.hue1, targetHue1, hueSmoothing, maxStep);
+      const nextHue2 = lerpHue(prev.hue2, targetHue2, hueSmoothing * 0.92, maxStep * 0.92);
+      const nextHue3 = lerpHue(prev.hue3, targetHue3, hueSmoothing * 0.86, maxStep * 0.86);
+      const nextEnergy = prev.energy + (Math.max(0.14, combinedEnergy) - prev.energy) * 0.12;
 
       const nextState: ChromaticState = {
         hue1: nextHue1,
@@ -357,7 +397,7 @@ export function useChromaticMorph(
         energy: nextEnergy,
         playerEnergy,
         micEnergy,
-        dominantHz: prev.dominantHz + (targetHz - prev.dominantHz) * 0.025,
+        dominantHz: prev.dominantHz + (targetHz - prev.dominantHz) * 0.14,
         harmonicRatio,
       };
       stateRef.current = nextState;
@@ -368,8 +408,8 @@ export function useChromaticMorph(
         applyCssVariables(nextState);
       }
 
-      // Sync React HUD state cleanly (~2.2fps, CSS vars animate smoothly at 30fps without React re-renders)
-      if (now - lastReactSync > 450) {
+      // Sync React HUD state cleanly (~4.5fps, CSS vars animate smoothly at 30fps without React overhead)
+      if (now - lastReactSync > 220) {
         lastReactSync = now;
         setChromaticState(nextState);
       }
