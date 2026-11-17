@@ -1,18 +1,21 @@
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { FileSystemNode, PresetContent } from '../types';
 
 const STORAGE_KEY = 'omni_holographic_fs_v1';
 
+const INITIAL_ROOT: FileSystemNode = {
+  id: 'root',
+  parentId: null,
+  name: 'Raíz',
+  type: 'folder',
+  children: [],
+  createdAt: Date.now()
+};
+
 export const useFileSystem = () => {
-  const [root, setRoot] = useState<FileSystemNode>({
-    id: 'root',
-    parentId: null,
-    name: 'Raíz',
-    type: 'folder',
-    children: [],
-    createdAt: Date.now()
-  });
+  const [root, setRoot] = useState<FileSystemNode>(INITIAL_ROOT);
+  const rootRef = useRef<FileSystemNode>(INITIAL_ROOT);
 
   // Load from Storage
   useEffect(() => {
@@ -20,7 +23,10 @@ export const useFileSystem = () => {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        setRoot(parsed);
+        if (parsed && parsed.id === 'root') {
+          rootRef.current = parsed;
+          setRoot(parsed);
+        }
       } catch (e) {
         console.error("Failed to load file system", e);
       }
@@ -29,14 +35,19 @@ export const useFileSystem = () => {
 
   // Save to Storage
   const persist = useCallback((newRoot: FileSystemNode) => {
+    rootRef.current = newRoot;
     setRoot(newRoot);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(newRoot));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(newRoot));
+    } catch (e) {
+      console.error("Failed to save file system", e);
+    }
   }, []);
 
   // --- Helpers ---
 
   // Recursive finder
-  const findNode = (id: string, node: FileSystemNode): FileSystemNode | null => {
+  const findNode = useCallback((id: string, node: FileSystemNode = rootRef.current): FileSystemNode | null => {
     if (node.id === id) return node;
     if (node.children) {
       for (const child of node.children) {
@@ -45,7 +56,7 @@ export const useFileSystem = () => {
       }
     }
     return null;
-  };
+  }, []);
 
   // Recursive updater
   const updateTree = (node: FileSystemNode, targetId: string, transform: (n: FileSystemNode) => FileSystemNode): FileSystemNode => {
@@ -102,17 +113,24 @@ export const useFileSystem = () => {
       children: [],
       createdAt: Date.now()
     };
-    persist(addToFolder(root, parentId, newFolder));
+    persist(addToFolder(rootRef.current, parentId, newFolder));
     return newFolder.id;
   };
 
   const saveFile = (parentId: string, name: string, content: PresetContent) => {
-    const parentNode = findNode(parentId, root);
+    const currentTree = rootRef.current;
+    const parentNode = findNode(parentId, currentTree);
     if (parentNode && parentNode.children) {
       const existingFile = parentNode.children.find(c => c.type === 'file' && c.name === name);
       if (existingFile) {
         // Overwrite existing file
-        persist(updateTree(root, existingFile.id, (node) => ({ ...node, content, createdAt: Date.now() })));
+        persist(
+          updateTree(currentTree, existingFile.id, (node) => ({
+            ...node,
+            content: { ...content, updatedAt: Date.now() },
+            createdAt: node.createdAt || Date.now()
+          }))
+        );
         return;
       }
     }
@@ -122,16 +140,16 @@ export const useFileSystem = () => {
       parentId,
       name,
       type: 'file',
-      content,
+      content: { ...content, dateCreated: content.dateCreated || Date.now(), updatedAt: Date.now() },
       createdAt: Date.now()
     };
-    persist(addToFolder(root, parentId, newFile));
+    persist(addToFolder(currentTree, parentId, newFile));
   };
 
   // SMART SAVE: Handles paths like "Folder/Subfolder/File"
   const saveFileWithPath = (path: string[], fileName: string, content: PresetContent) => {
     let currentFolderId = 'root';
-    let currentTree = root;
+    let currentTree = rootRef.current;
 
     // Traverse or create path
     for (const folderName of path) {
@@ -164,14 +182,18 @@ export const useFileSystem = () => {
     const existingFile = folderNode?.children?.find(c => c.type === 'file' && c.name === fileName);
     
     if (existingFile) {
-      currentTree = updateTree(currentTree, existingFile.id, (node) => ({ ...node, content, createdAt: Date.now() }));
+      currentTree = updateTree(currentTree, existingFile.id, (node) => ({
+        ...node,
+        content: { ...content, updatedAt: Date.now() },
+        createdAt: node.createdAt || Date.now()
+      }));
     } else {
       const newFile: FileSystemNode = {
           id: crypto.randomUUID(),
           parentId: currentFolderId,
           name: fileName,
           type: 'file',
-          content,
+          content: { ...content, dateCreated: content.dateCreated || Date.now(), updatedAt: Date.now() },
           createdAt: Date.now()
       };
       currentTree = addToFolder(currentTree, currentFolderId, newFile);
@@ -180,11 +202,41 @@ export const useFileSystem = () => {
   };
 
   const deleteNode = (id: string) => {
-    persist(deleteFromTree(root, id));
+    if (id === 'root') return;
+    persist(deleteFromTree(rootRef.current, id));
   };
 
   const renameNode = (id: string, newName: string) => {
-    persist(updateTree(root, id, (node) => ({ ...node, name: newName })));
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+    persist(updateTree(rootRef.current, id, (node) => ({ ...node, name: trimmed })));
+  };
+
+  const updateFileNode = (id: string, updates: { name?: string; content?: PresetContent }) => {
+    const currentTree = rootRef.current;
+    const target = findNode(id, currentTree);
+    if (!target) return false;
+
+    const nextTree = updateTree(currentTree, id, (node) => {
+      const nextName = updates.name !== undefined && updates.name.trim() ? updates.name.trim() : node.name;
+      const nextContent = updates.content
+        ? {
+            ...node.content,
+            ...updates.content,
+            dateCreated: updates.content.dateCreated ?? node.content?.dateCreated ?? Date.now(),
+            updatedAt: Date.now(),
+          }
+        : node.content;
+
+      return {
+        ...node,
+        name: nextName,
+        content: nextContent,
+      };
+    });
+
+    persist(nextTree);
+    return true;
   };
 
   const regenerateIds = (node: FileSystemNode, parentId: string | null): FileSystemNode => {
@@ -193,13 +245,61 @@ export const useFileSystem = () => {
       ...node,
       id: newId,
       parentId,
+      createdAt: Date.now(),
+      content: node.content
+        ? {
+            ...node.content,
+            oscillators: (node.content.oscillators || []).map((osc) => ({
+              ...osc,
+              id: crypto.randomUUID(),
+            })),
+            dateCreated: Date.now(),
+            updatedAt: Date.now(),
+          }
+        : undefined,
       children: node.children?.map(c => regenerateIds(c, newId))
     };
+  };
+
+  const duplicateNode = (id: string): string | null => {
+    if (id === 'root') return null;
+    const currentTree = rootRef.current;
+    const target = findNode(id, currentTree);
+    if (!target) return null;
+
+    const parentId = target.parentId || 'root';
+    const cloned = regenerateIds(target, parentId);
+    cloned.name = `${target.name} (Copia)`;
+
+    persist(addToFolder(currentTree, parentId, cloned));
+    return cloned.id;
+  };
+
+  const moveNode = (nodeId: string, targetFolderId: string): boolean => {
+    if (nodeId === 'root' || nodeId === targetFolderId) return false;
+    const currentTree = rootRef.current;
+    const nodeToMove = findNode(nodeId, currentTree);
+    const targetFolder = findNode(targetFolderId, currentTree);
+
+    if (!nodeToMove || !targetFolder || targetFolder.type !== 'folder') return false;
+    if (nodeToMove.parentId === targetFolderId) return false;
+    // Prevent moving a folder inside one of its own descendants
+    if (nodeToMove.type === 'folder' && findNode(targetFolderId, nodeToMove)) return false;
+
+    const treeWithoutNode = deleteFromTree(currentTree, nodeId);
+    const updatedNode: FileSystemNode = {
+      ...nodeToMove,
+      parentId: targetFolderId,
+    };
+
+    persist(addToFolder(treeWithoutNode, targetFolderId, updatedNode));
+    return true;
   };
 
   const importSystem = (jsonString: string) => {
     try {
         const importedRoot = JSON.parse(jsonString);
+        const currentTree = rootRef.current;
         // Basic validation
         if (importedRoot.id === 'root' && Array.isArray(importedRoot.children)) {
             
@@ -229,8 +329,8 @@ export const useFileSystem = () => {
             };
 
             const newRoot = {
-                ...root,
-                children: mergeChildren(root.children || [], importedRoot.children, 'root')
+                ...currentTree,
+                children: mergeChildren(currentTree.children || [], importedRoot.children, 'root')
             };
             
             persist(newRoot);
@@ -244,7 +344,7 @@ export const useFileSystem = () => {
   };
 
   const exportSystem = () => {
-    return JSON.stringify(root, null, 2);
+    return JSON.stringify(rootRef.current, null, 2);
   };
 
   return {
@@ -254,6 +354,9 @@ export const useFileSystem = () => {
     saveFileWithPath,
     deleteNode,
     renameNode,
+    updateFileNode,
+    duplicateNode,
+    moveNode,
     importSystem,
     exportSystem,
     findNode

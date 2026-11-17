@@ -1,9 +1,9 @@
-
 import React, { useMemo, useState } from 'react';
 import { useAudio } from '../hooks/useAudio';
 import { useFileSystem } from '../hooks/useFileSystem';
 import { useUndoRedo } from '../hooks/useUndoRedo';
-import { PresetContent, OscillatorState } from '../types';
+import { PresetContent, OscillatorState, WaveType } from '../types';
+import { classifyPairResonance, SpectrometerResonance } from '../utils/frequencyAnalysis';
 import OscillatorControls from './OscillatorControls';
 import Visualizer, { VisualizerSource } from './Visualizer';
 import CymaticsVisualizer3D from './CymaticsVisualizer3D';
@@ -23,70 +23,101 @@ interface Props {
   onVizTabChange?: (tab: '2d' | '3d' | 'spiral') => void;
 }
 
-// Helper to get brainwave name
-const getWaveName = (hz: number) => {
-    if (hz < 0.5) return 'Epsilon';
-    if (hz < 4) return 'Delta';
-    if (hz < 8) return 'Theta';
-    if (hz < 12) return 'Alfa';
-    if (hz < 30) return 'Beta';
-    if (hz < 100) return 'Gamma';
-    return 'Lambda';
+const ACCENT_STYLES: Record<
+  SpectrometerResonance['accentColor'],
+  { card: string; iconBg: string; iconText: string; badge: string }
+> = {
+  purple: {
+    card: 'bg-purple-950/35 border-purple-500/35 hover:border-purple-400/60 shadow-[inset_0_0_20px_rgba(168,85,247,0.12)]',
+    iconBg: 'bg-purple-500/15 border-purple-400/35',
+    iconText: 'text-purple-300',
+    badge: 'bg-purple-500/20 border-purple-400/40 text-purple-200',
+  },
+  cyan: {
+    card: 'bg-cyan-950/35 border-cyan-500/35 hover:border-cyan-400/60 shadow-[inset_0_0_20px_rgba(34,211,238,0.12)]',
+    iconBg: 'bg-cyan-500/15 border-cyan-400/35',
+    iconText: 'text-cyan-300',
+    badge: 'bg-cyan-500/20 border-cyan-400/40 text-cyan-200',
+  },
+  emerald: {
+    card: 'bg-emerald-950/35 border-emerald-500/35 hover:border-emerald-400/60 shadow-[inset_0_0_20px_rgba(16,185,129,0.12)]',
+    iconBg: 'bg-emerald-500/15 border-emerald-400/35',
+    iconText: 'text-emerald-300',
+    badge: 'bg-emerald-500/20 border-emerald-400/40 text-emerald-200',
+  },
+  amber: {
+    card: 'bg-amber-950/35 border-amber-500/35 hover:border-amber-400/60 shadow-[inset_0_0_20px_rgba(245,158,11,0.12)]',
+    iconBg: 'bg-amber-500/15 border-amber-400/35',
+    iconText: 'text-amber-300',
+    badge: 'bg-amber-500/20 border-amber-400/40 text-amber-200',
+  },
+  pink: {
+    card: 'bg-pink-950/35 border-pink-500/35 hover:border-pink-400/60 shadow-[inset_0_0_20px_rgba(236,72,153,0.12)]',
+    iconBg: 'bg-pink-500/15 border-pink-400/35',
+    iconText: 'text-pink-300',
+    badge: 'bg-pink-500/20 border-pink-400/40 text-pink-200',
+  },
 };
 
-interface ResonanceResult {
-    id: string;
-    type: 'binaural' | 'beat';
-    hz: string;
-    waveName: string;
-    sourceA: string;
-    sourceB: string;
-}
+const CLASSIFICATION_ICONS: Record<SpectrometerResonance['classification'], string> = {
+  interferencia_binaural: 'Headphones',
+  modulacion_amplitud: 'Waves',
+  acoplamiento_fase: 'Compass',
+  consonancia_armonica: 'Sparkles',
+  heterodino_diferencial: 'Zap',
+};
 
-const Generator: React.FC<Props> = ({ audio, isMasterPlaying, onStartLiveSession, sessionPermissions, activeVizTab = '2d', onVizTabChange }) => {
-  const { oscillators, addOscillator, removeOscillator, updateOscillator, setAllOscillators, getCombinedAnalyser, getOscillatorAnalyser } = audio;
-  
+const Generator: React.FC<Props> = ({
+  audio,
+  isMasterPlaying,
+  onStartLiveSession,
+  sessionPermissions,
+  activeVizTab = '2d',
+  onVizTabChange,
+}) => {
+  const {
+    oscillators,
+    addOscillator,
+    removeOscillator,
+    updateOscillator,
+    setAllOscillators,
+    getCombinedAnalyser,
+    getOscillatorAnalyser,
+  } = audio;
+
   const canEdit = sessionPermissions ? sessionPermissions.canEditFrequencies : true;
-  
-  // Undo/Redo Hook (Control+Z / Cmd+Z)
   const history = useUndoRedo(oscillators, setAllOscillators);
-
-  // File System Integration
   const fs = useFileSystem();
+
   const [showExplorer, setShowExplorer] = useState(false);
   const [explorerMode, setExplorerMode] = useState<'save' | 'load'>('save');
-
-  // AI Generator Modal state
   const [showAIModal, setShowAIModal] = useState(false);
+  const [expandAllOscillators, setExpandAllOscillators] = useState(false);
+  const [showGlobalControls, setShowGlobalControls] = useState(false);
+  const [globalVolumeSlider, setGlobalVolumeSlider] = useState(0.5);
 
-  // Wrapped addOscillator to capture history
   const handleAddOscillator = (initialState?: Partial<OscillatorState>) => {
     if (!canEdit) return;
     history.pushState(oscillators);
     addOscillator(initialState);
   };
 
-  // Wrapped removeOscillator to capture history
   const handleRemoveOscillator = (id: string) => {
     if (!canEdit) return;
     history.pushState(oscillators);
     removeOscillator(id);
   };
 
-  // Wrapped updateOscillator to capture history
   const handleUpdateOscillator = (id: string, changes: Partial<OscillatorState>) => {
     if (!canEdit) return;
     history.pushState(oscillators);
     updateOscillator(id, changes);
   };
 
-  // Apply AI Generated Preset
   const handleApplyAIPreset = (aiOscillators: Partial<OscillatorState>[]) => {
     if (!canEdit) return;
     history.pushState(oscillators);
-    // Clear existing
     oscillators.forEach(osc => removeOscillator(osc.id));
-    // Add new
     setTimeout(() => {
       aiOscillators.forEach(oscParams => {
         addOscillator(oscParams);
@@ -94,20 +125,17 @@ const Generator: React.FC<Props> = ({ audio, isMasterPlaying, onStartLiveSession
     }, 50);
   };
 
-  // Logic to remove all and load new or mix
-  const loadPreset = (preset: PresetContent, mix: boolean = false) => {
+  const loadPreset = (preset: PresetContent, mix = false) => {
     if (!canEdit) return;
     history.pushState(oscillators);
     if (!mix) {
-      // Clear existing
       oscillators.forEach(osc => removeOscillator(osc.id));
     }
-    // Add new
     setTimeout(() => {
-        preset.oscillators.forEach(osc => {
-             const { id, ...props } = osc;
-             addOscillator(props);
-        });
+      preset.oscillators.forEach(osc => {
+        const { id: _id, ...props } = osc;
+        addOscillator(props);
+      });
     }, mix ? 0 : 50);
   };
 
@@ -117,91 +145,62 @@ const Generator: React.FC<Props> = ({ audio, isMasterPlaying, onStartLiveSession
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `omni_backup_${new Date().toISOString().slice(0,10)}.json`;
+    a.download = `omni_backup_${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-      if (!canEdit) return;
-      const file = e.target.files?.[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-          if (ev.target?.result) {
-              const success = fs.importSystem(ev.target.result as string);
-              if (success) alert('Backup importado correctamente. Las carpetas se han fusionado.');
-              else alert('Error al importar el archivo.');
-          }
-      };
-      reader.readAsText(file);
+    if (!canEdit) return;
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      if (ev.target?.result) {
+        const success = fs.importSystem(ev.target.result as string);
+        if (success) alert('Backup importado correctamente. Las carpetas se han fusionado.');
+        else alert('Error al importar el archivo.');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
   };
 
-  // Advanced Resonance Calculation (Combinatorial Analysis)
+  // Physical-Scientific Spectrometer Analysis via classifyPairResonance
   const resonanceResults = useMemo(() => {
-    const active = oscillators.filter(o => o.isPlaying && !o.isIndependent);
-    const results: ResonanceResult[] = [];
+    const active = oscillators.filter(o => o.isPlaying);
+    const results: SpectrometerResonance[] = [];
 
     for (let i = 0; i < active.length; i++) {
-        for (let j = i + 1; j < active.length; j++) {
-            const oscA = active[i];
-            const oscB = active[j];
-            
-            const diff = Math.abs(oscA.frequency - oscB.frequency);
-
-            if (diff > 0.1 && diff < 120) {
-                const waveName = getWaveName(diff);
-                const hzFormatted = diff.toFixed(2);
-
-                results.push({
-                    id: `beat-${oscA.id}-${oscB.id}`,
-                    type: 'beat',
-                    hz: hzFormatted,
-                    waveName,
-                    sourceA: oscA.name || 'Freq A',
-                    sourceB: oscB.name || 'Freq B'
-                });
-
-                const isOpposite = (oscA.panX <= -0.1 && oscB.panX >= 0.1) || (oscA.panX >= 0.1 && oscB.panX <= -0.1);
-                
-                if (isOpposite) {
-                     results.push({
-                        id: `bin-${oscA.id}-${oscB.id}`,
-                        type: 'binaural',
-                        hz: hzFormatted,
-                        waveName,
-                        sourceA: oscA.name || 'Freq A',
-                        sourceB: oscB.name || 'Freq B'
-                    });
-                }
-            }
+      for (let j = i + 1; j < active.length; j++) {
+        const res = classifyPairResonance(active[i], active[j]);
+        if (res) {
+          results.push(res);
         }
+      }
     }
-
     return results;
   }, [oscillators]);
 
-  // Construct Visualizer Sources
   const visualizerSources: VisualizerSource[] = useMemo(() => {
     const sources: VisualizerSource[] = [];
-    
     const combined = getCombinedAnalyser();
     if (combined) {
-        sources.push({ analyser: combined, color: '#475569' });
+      sources.push({ analyser: combined, color: '#475569' });
     }
 
     oscillators.forEach(osc => {
-        if (osc.isPlaying && osc.isIndependent) {
-            const analyser = getOscillatorAnalyser(osc.id);
-            if (analyser) {
-                sources.push({ analyser, color: osc.color });
-            }
+      if (osc.isPlaying && osc.isIndependent) {
+        const oscAnalyser = getOscillatorAnalyser(osc.id);
+        if (oscAnalyser) {
+          sources.push({ analyser: oscAnalyser, color: osc.color });
         }
+      }
     });
-    
-    if (sources.length === 1 && sources[0].color === '#475569') {
-        sources[0].color = '#22d3ee';
-    }
 
+    if (sources.length === 1 && sources[0].color === '#475569') {
+      sources[0].color = '#22d3ee';
+    }
     return sources;
   }, [oscillators, getCombinedAnalyser, getOscillatorAnalyser]);
 
@@ -211,108 +210,118 @@ const Generator: React.FC<Props> = ({ audio, isMasterPlaying, onStartLiveSession
 
   return (
     <div className="animate-fade-in space-y-6 pb-24">
-      
       {/* --- Toolbar --- */}
-      <div className="flex flex-col items-center justify-center gap-6 bg-black/60 border border-white/10 p-6 rounded-3xl backdrop-blur-2xl shadow-[0_10px_40px_rgba(0,0,0,0.8),inset_0_0_20px_rgba(255,255,255,0.05)] relative overflow-hidden">
-         <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-purple-500/5 to-pink-500/5 pointer-events-none"></div>
-         <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent"></div>
-         
-         <div className="flex flex-col sm:flex-row flex-wrap items-center justify-center gap-4 sm:gap-5 relative z-10 w-full">
-            <button 
-                onClick={audio.toggleMasterPlay}
-                className={`group relative overflow-hidden flex items-center justify-center w-full sm:w-16 h-16 rounded-2xl transition-all duration-500 border-2 shadow-[0_0_20px_rgba(0,0,0,0.5),inset_0_0_10px_rgba(255,255,255,0.1)] hover:-translate-y-1 ${audio.isPlaying ? 'bg-cyan-500 text-black border-cyan-300 shadow-[0_0_30px_rgba(34,211,238,0.6),inset_0_0_15px_rgba(0,0,0,0.2)] scale-105' : 'bg-black/80 text-cyan-400 border-cyan-500/50 hover:border-cyan-400 hover:bg-cyan-950/50 hover:shadow-[0_0_30px_rgba(34,211,238,0.4)]'}`}
-                title={audio.isPlaying ? "Pausar Todo" : "Reproducir Todo"}
+      <div className="flex flex-col items-center justify-center gap-5 bg-black/60 border border-white/10 p-4 sm:p-6 rounded-3xl backdrop-blur-2xl shadow-[0_10px_40px_rgba(0,0,0,0.8),inset_0_0_20px_rgba(255,255,255,0.05)] relative">
+        <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 relative z-10 w-full">
+          <button
+            onClick={audio.toggleMasterPlay}
+            className={`group relative flex items-center justify-center w-full sm:w-16 h-14 sm:h-16 rounded-2xl transition-all duration-300 border-2 shadow-[0_0_20px_rgba(0,0,0,0.5)] ${
+              audio.isPlaying
+                ? 'bg-cyan-500 text-black border-cyan-300 shadow-[0_0_30px_rgba(34,211,238,0.6)] scale-[1.02]'
+                : 'bg-black/80 text-cyan-400 border-cyan-500/50 hover:border-cyan-400 hover:bg-cyan-950/50'
+            }`}
+            title={audio.isPlaying ? 'Pausar Todo' : 'Reproducir Todo'}
+          >
+            <Icon name={audio.isPlaying ? 'Pause' : 'Play'} size={28} className={audio.isPlaying ? '' : 'ml-0.5'} />
+            <span className="sm:hidden ml-2.5 text-xs font-bold uppercase tracking-widest">
+              {audio.isPlaying ? 'Pausar Todo' : 'Reproducir Todo'}
+            </span>
+          </button>
+
+          {/* Undo / Redo */}
+          <div className="flex items-center justify-center gap-2 bg-black/50 p-1.5 rounded-2xl border border-white/10">
+            <button
+              onClick={history.undo}
+              disabled={!history.canUndo || !canEdit}
+              className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${
+                history.canUndo && canEdit
+                  ? 'bg-cyan-950/50 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-900/60'
+                  : 'text-slate-600 border border-transparent cursor-not-allowed opacity-50'
+              }`}
+              title="Deshacer (Ctrl+Z / Cmd+Z)"
             >
-                <Icon name={audio.isPlaying ? 'Pause' : 'Play'} size={32} className={audio.isPlaying ? '' : 'ml-1'} />
-                <span className="sm:hidden ml-3 font-bold uppercase tracking-widest">{audio.isPlaying ? "Pausar Todo" : "Reproducir Todo"}</span>
+              <Icon name="CornerUpLeft" size={15} />
+              <span>Deshacer</span>
             </button>
 
-            {/* Undo / Redo buttons (Control+Z) */}
-            <div className="flex items-center gap-2 bg-black/50 p-2 rounded-2xl border border-white/10 shadow-[inset_0_0_10px_rgba(0,0,0,0.5)]">
-              <button
-                onClick={history.undo}
-                disabled={!history.canUndo || !canEdit}
-                className={`flex items-center gap-2 px-4 py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${
-                  history.canUndo && canEdit
-                    ? 'bg-cyan-950/50 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-900/60 shadow-[0_0_15px_rgba(34,211,238,0.2)]'
-                    : 'text-slate-600 border border-transparent cursor-not-allowed opacity-50'
-                }`}
-                title="Deshacer (Ctrl+Z / Cmd+Z)"
-              >
-                <Icon name="RotateCcw" size={16} />
-                Deshacer
-              </button>
-
-              <button
-                onClick={history.redo}
-                disabled={!history.canRedo || !canEdit}
-                className={`flex items-center gap-2 px-4 py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${
-                  history.canRedo && canEdit
-                    ? 'bg-purple-950/50 text-purple-300 border border-purple-500/40 hover:bg-purple-900/60 shadow-[0_0_15px_rgba(168,85,247,0.2)]'
-                    : 'text-slate-600 border border-transparent cursor-not-allowed opacity-50'
-                }`}
-                title="Rehacer (Ctrl+Y / Cmd+Shift+Z)"
-              >
-                <Icon name="RotateCw" size={16} />
-                Rehacer
-              </button>
-            </div>
-
-            {/* AI Generator Trigger button */}
-            <button 
-                onClick={() => setShowAIModal(true)}
-                disabled={!canEdit}
-                className="group relative overflow-hidden flex items-center justify-center gap-3 px-6 py-4 w-full sm:w-auto bg-gradient-to-r from-cyan-950/60 via-purple-950/60 to-pink-950/60 hover:from-cyan-900/80 hover:to-purple-900/80 text-cyan-100 rounded-2xl text-sm font-bold uppercase tracking-widest transition-all duration-500 border-2 border-cyan-400/50 shadow-[0_0_30px_rgba(34,211,238,0.3),inset_0_0_15px_rgba(34,211,238,0.2)] hover:shadow-[0_0_45px_rgba(34,211,238,0.5)] hover:-translate-y-1 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:-translate-y-0"
+            <button
+              onClick={history.redo}
+              disabled={!history.canRedo || !canEdit}
+              className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${
+                history.canRedo && canEdit
+                  ? 'bg-purple-950/50 text-purple-300 border border-purple-500/40 hover:bg-purple-900/60'
+                  : 'text-slate-600 border border-transparent cursor-not-allowed opacity-50'
+              }`}
+              title="Rehacer (Ctrl+Y / Cmd+Shift+Z)"
             >
-                <div className="absolute inset-0 bg-gradient-to-r from-cyan-400/0 via-cyan-400/20 to-cyan-400/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 rounded-2xl"></div>
-                <Icon name="Zap" size={20} className="text-cyan-300 drop-shadow-[0_0_10px_rgba(34,211,238,0.8)]" /> 
-                <span className="whitespace-nowrap">Generar con IA</span>
+              <Icon name="CornerUpRight" size={15} />
+              <span>Rehacer</span>
             </button>
+          </div>
 
-            <button 
-                onClick={() => { setExplorerMode('save'); setShowExplorer(true); }}
-                className="group relative overflow-hidden flex items-center justify-center gap-3 px-6 py-4 w-full sm:w-auto bg-cyan-950/40 hover:bg-cyan-900/60 text-cyan-200 rounded-2xl text-sm font-bold uppercase tracking-widest transition-all duration-500 border-2 border-cyan-500/30 shadow-[0_0_20px_rgba(34,211,238,0.1),inset_0_0_10px_rgba(34,211,238,0.1)] hover:shadow-[0_0_30px_rgba(34,211,238,0.3)] hover:-translate-y-1 hover:border-cyan-400/50"
-            >
-                <Icon name="Save" size={20} className="drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]" /> 
-                <span className="whitespace-nowrap">Guardar Preset</span>
-            </button>
-            <button 
-                onClick={() => { setExplorerMode('load'); setShowExplorer(true); }}
-                disabled={!canEdit}
-                className="group relative overflow-hidden flex items-center justify-center gap-3 px-6 py-4 w-full sm:w-auto bg-purple-950/40 hover:bg-purple-900/60 text-purple-200 rounded-2xl text-sm font-bold uppercase tracking-widest transition-all duration-500 border-2 border-purple-500/30 shadow-[0_0_20px_rgba(168,85,247,0.1),inset_0_0_10px_rgba(168,85,247,0.1)] hover:shadow-[0_0_30px_rgba(168,85,247,0.3)] hover:-translate-y-1 hover:border-purple-400/50 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:-translate-y-0"
-            >
-                <Icon name="Folder" size={20} className="drop-shadow-[0_0_8px_rgba(168,85,247,0.8)]" /> 
-                <span className="whitespace-nowrap">Cargar Preset</span>
-            </button>
-            <button 
-                onClick={() => {
-                   if (onStartLiveSession) {
-                       onStartLiveSession({
-                           oscillators,
-                           dateCreated: Date.now(),
-                           description: 'Sesión en vivo de Omni-Frecuencias',
-                       });
-                   }
-                }}
-                className="group relative overflow-hidden flex items-center justify-center gap-3 px-6 py-4 w-full sm:w-auto bg-red-950/40 hover:bg-red-900/60 text-red-200 rounded-2xl text-sm font-bold uppercase tracking-widest transition-all duration-500 border-2 border-red-500/30 shadow-[0_0_20px_rgba(239,68,68,0.1),inset_0_0_10px_rgba(239,68,68,0.1)] hover:shadow-[0_0_30px_rgba(239,68,68,0.3)] hover:-translate-y-1 hover:border-red-400/50"
-            >
-                <Icon name="Radio" size={20} className="drop-shadow-[0_0_8px_rgba(239,68,68,0.8)]" /> 
-                <span className="whitespace-nowrap">Transmitir en Vivo</span>
-            </button>
-         </div>
+          <button
+            onClick={() => setShowAIModal(true)}
+            disabled={!canEdit}
+            className="flex items-center justify-center gap-2.5 px-5 py-3.5 w-full sm:w-auto bg-gradient-to-r from-cyan-950/70 via-purple-950/70 to-pink-950/70 hover:from-cyan-900/80 hover:to-purple-900/80 text-cyan-100 rounded-2xl text-xs sm:text-sm font-bold uppercase tracking-widest transition-all border-2 border-cyan-400/50 shadow-[0_0_25px_rgba(34,211,238,0.25)] disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Icon name="Zap" size={18} className="text-cyan-300" />
+            <span className="whitespace-nowrap">Síntesis Asistida IA</span>
+          </button>
 
-         <div className="flex items-center justify-center gap-6 pt-5 border-t border-white/10 w-full max-w-md relative z-10">
-             <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 hover:text-cyan-300 hover:bg-cyan-500/10 rounded-xl transition-colors border border-transparent hover:border-cyan-500/20 shadow-[inset_0_0_10px_rgba(0,0,0,0.5)]" title="Exportar Backup v.7">
-                 <Icon name="Download" size={14} className="text-cyan-500/70" /> Exportar v.7
-             </button>
-             <label className={`flex items-center gap-2 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 hover:text-purple-300 hover:bg-purple-500/10 rounded-xl cursor-pointer transition-colors border border-transparent hover:border-purple-500/20 shadow-[inset_0_0_10px_rgba(0,0,0,0.5)] ${!canEdit && 'opacity-50 cursor-not-allowed'}`} title="Importar Backup">
-                 <Icon name="Upload" size={14} className="text-purple-500/70" /> Importar
-                 <input type="file" accept=".json" onChange={handleImport} disabled={!canEdit} className="hidden" />
-             </label>
-         </div>
+          <button
+            onClick={() => { setExplorerMode('save'); setShowExplorer(true); }}
+            className="flex items-center justify-center gap-2.5 px-5 py-3.5 w-full sm:w-auto bg-cyan-950/40 hover:bg-cyan-900/60 text-cyan-200 rounded-2xl text-xs sm:text-sm font-bold uppercase tracking-widest transition-all border-2 border-cyan-500/30 hover:border-cyan-400/50"
+          >
+            <Icon name="Save" size={18} />
+            <span className="whitespace-nowrap">Guardar Preset</span>
+          </button>
+
+          <button
+            onClick={() => { setExplorerMode('load'); setShowExplorer(true); }}
+            disabled={!canEdit}
+            className="flex items-center justify-center gap-2.5 px-5 py-3.5 w-full sm:w-auto bg-purple-950/40 hover:bg-purple-900/60 text-purple-200 rounded-2xl text-xs sm:text-sm font-bold uppercase tracking-widest transition-all border-2 border-purple-500/30 hover:border-purple-400/50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Icon name="Folder" size={18} />
+            <span className="whitespace-nowrap">Cargar Preset</span>
+          </button>
+
+          <button
+            onClick={() => {
+              if (onStartLiveSession) {
+                onStartLiveSession({
+                  oscillators,
+                  dateCreated: Date.now(),
+                  description: 'Sesión en vivo de Omni-Frecuencias',
+                });
+              }
+            }}
+            className="flex items-center justify-center gap-2.5 px-5 py-3.5 w-full sm:w-auto bg-red-950/40 hover:bg-red-900/60 text-red-200 rounded-2xl text-xs sm:text-sm font-bold uppercase tracking-widest transition-all border-2 border-red-500/30 hover:border-red-400/50"
+          >
+            <Icon name="Radio" size={18} />
+            <span className="whitespace-nowrap">Transmitir en Vivo</span>
+          </button>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-center gap-4 pt-4 border-t border-white/10 w-full max-w-md relative z-10">
+          <button
+            onClick={handleExport}
+            className="flex items-center gap-2 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400 hover:text-cyan-300 hover:bg-cyan-500/10 rounded-xl transition-colors border border-white/5"
+            title="Exportar Backup v.7"
+          >
+            <Icon name="Download" size={14} className="text-cyan-500/80" /> Exportar v.7
+          </button>
+          <label
+            className={`flex items-center gap-2 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400 hover:text-purple-300 hover:bg-purple-500/10 rounded-xl cursor-pointer transition-colors border border-white/5 ${
+              !canEdit ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
+            title="Importar Backup"
+          >
+            <Icon name="Upload" size={14} className="text-purple-500/80" /> Importar
+            <input type="file" accept=".json" onChange={handleImport} disabled={!canEdit} className="hidden" />
+          </label>
+        </div>
       </div>
 
-      {/* --- AI Generator Modal --- */}
       {showAIModal && (
         <AIGeneratorModal
           onClose={() => setShowAIModal(false)}
@@ -320,230 +329,326 @@ const Generator: React.FC<Props> = ({ audio, isMasterPlaying, onStartLiveSession
         />
       )}
 
-      {/* --- File Explorer Modal --- */}
       {showExplorer && (
-          <FileExplorer 
-             mode={explorerMode}
-             fs={fs}
-             onClose={() => setShowExplorer(false)}
-             onFileSelect={loadPreset}
-             currentConfig={{
-                 oscillators,
-                 dateCreated: Date.now(),
-                 description: 'Configuración generada'
-             }}
-          />
+        <FileExplorer
+          mode={explorerMode}
+          fs={fs}
+          onClose={() => setShowExplorer(false)}
+          onFileSelect={loadPreset}
+          currentConfig={{
+            oscillators,
+            dateCreated: Date.now(),
+            description: 'Configuración generada',
+          }}
+        />
       )}
 
-      {/* Master Visualizer & Info Header */}
-      <div className="relative p-6 rounded-3xl border border-white/10 bg-black/60 backdrop-blur-2xl shadow-[0_10px_40px_rgba(0,0,0,0.8),inset_0_0_20px_rgba(255,255,255,0.05)] overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 via-purple-500/5 to-pink-500/5 pointer-events-none"></div>
-        <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent"></div>
-        
-        <div className="flex flex-col lg:flex-row items-start lg:items-stretch justify-between mb-6 gap-6 border-b border-white/10 pb-5 relative z-10">
-            
-            {/* Header Title & Visualizer Mode Switcher */}
-            <div className="flex flex-col gap-3 min-w-[220px]">
-                <div className="flex items-center gap-3">
-                    <div className="p-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/30 shadow-[inset_0_0_15px_rgba(34,211,238,0.2)]">
-                        <Icon name="Activity" size={22} className="text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]" />
-                    </div>
-                    <h2 className="text-2xl font-display font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-white to-purple-300 tracking-wide">
-                        Resonancia Maestra
-                    </h2>
-                </div>
-
-                {/* 2D / 3D Cymatics Selector Tabs */}
-                <div className="grid grid-cols-3 sm:flex items-center gap-1 sm:gap-2 bg-black/50 p-1 rounded-xl border border-white/10 w-full lg:w-fit">
-                <button
-                  onClick={() => onVizTabChange && onVizTabChange('2d')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${activeVizTab === '2d' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 shadow-[0_0_10px_rgba(34,211,238,0.2)]' : 'text-slate-400 hover:bg-white/5'}`}
-                >
-                  <Icon name="Activity" size={14} />
-                  Ondas
-                </button>
-                <button
-                  onClick={() => onVizTabChange && onVizTabChange('3d')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${activeVizTab === '3d' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/50 shadow-[0_0_10px_rgba(168,85,247,0.2)]' : 'text-slate-400 hover:bg-white/5'}`}
-                >
-                  <Icon name="Hexagon" size={14} />
-                  Cimática 3D
-                </button>
-                 <button
-                  onClick={() => onVizTabChange && onVizTabChange('spiral')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${activeVizTab === 'spiral' ? 'bg-pink-500/20 text-pink-300 border border-pink-500/50 shadow-[0_0_10px_rgba(236,72,153,0.2)]' : 'text-slate-400 hover:bg-white/5'}`}
-                >
-                    <Icon name="Aperture" size={14} />
-                    Espiral
-                  </button>
-                </div>
-            </div>
-
-            {/* Results Display */}
-            <div className="flex-1 w-full bg-black/60 rounded-2xl border border-white/10 p-4 max-h-40 overflow-y-auto shadow-[inset_0_0_30px_rgba(0,0,0,0.8)] custom-scrollbar relative">
-                {resonanceResults.length === 0 ? (
-                     <div className="h-full flex flex-col items-center justify-center text-xs text-slate-500 font-bold uppercase tracking-widest italic opacity-70 gap-2">
-                        <Icon name="Waves" size={24} className="opacity-50" />
-                        <span>No se detectan interacciones resonantes activas.</span>
-                     </div>
-                ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 relative z-10">
-                        {resonanceResults.map(res => (
-                            <div key={res.id} className={`
-                                flex items-center justify-between px-4 py-3 rounded-xl border text-xs relative overflow-hidden group
-                                ${res.type === 'binaural' 
-                                    ? 'bg-purple-950/40 border-purple-500/30 shadow-[inset_0_0_15px_rgba(168,85,247,0.2)] hover:shadow-[0_0_20px_rgba(168,85,247,0.4)]' 
-                                    : 'bg-amber-950/40 border-amber-500/30 shadow-[inset_0_0_15px_rgba(245,158,11,0.2)] hover:shadow-[0_0_20px_rgba(245,158,11,0.4)]'}
-                                transition-all duration-300 hover:-translate-y-0.5
-                            `}>
-                                <div className="flex items-center gap-4 relative z-10">
-                                    <div className={`p-2 rounded-lg ${res.type === 'binaural' ? 'bg-purple-500/10 border border-purple-500/20' : 'bg-amber-500/10 border border-amber-500/20'}`}>
-                                        <Icon name={res.type === 'binaural' ? 'Brain' : 'Zap'} size={18} className={`${res.type === 'binaural' ? 'text-purple-400' : 'text-amber-400'}`} />
-                                    </div>
-                                    <div className="flex flex-col">
-                                        <span className={`font-black uppercase tracking-[0.2em] text-[10px] ${res.type === 'binaural' ? 'text-purple-300' : 'text-amber-300'}`}>
-                                            {res.type === 'binaural' ? 'Binaural' : 'Batido'}
-                                        </span>
-                                        <span className="text-[10px] text-slate-400 font-bold tracking-wider mt-0.5">
-                                            {res.sourceA} <span className="text-slate-600 mx-1">+</span> {res.sourceB}
-                                        </span>
-                                    </div>
-                                </div>
-                                <div className="text-right relative z-10">
-                                    <div className="font-display font-black text-white text-lg tracking-wider">{res.hz} <span className="text-xs text-slate-400 font-bold">Hz</span></div>
-                                    <div className="text-[9px] font-bold uppercase tracking-[0.2em] mt-0.5 text-slate-400">
-                                        {res.waveName}
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
-        </div>
-        
-        {/* Render Selected Visualizer (2D Canvas or 3D Cymatics) */}
-        {activeVizTab === '2d' && (
-          <div className="h-80 w-full bg-black/80 rounded-2xl border border-white/10 overflow-hidden relative shadow-[inset_0_0_40px_rgba(0,0,0,0.9)] z-10 group/viz">
-              <Visualizer sources={visualizerSources} height={320} />
-              <div className="absolute top-4 right-4 flex flex-col gap-2 items-end pointer-events-none z-20">
-                  <div className="flex items-center gap-3 px-4 py-2 bg-black/60 rounded-xl text-[10px] text-slate-300 border border-white/10 backdrop-blur-md">
-                      <div className="w-2.5 h-2.5 rounded-full bg-slate-500 border border-slate-400"></div>
-                      <span className="font-bold uppercase tracking-widest">Onda Combinada</span>
-                  </div>
-                  {oscillators.filter(o => o.isPlaying && o.isIndependent).map(osc => (
-                      <div key={osc.id} className="flex items-center gap-3 px-4 py-2 bg-black/60 rounded-xl text-[10px] text-white border border-white/10 backdrop-blur-md">
-                          <div className="w-2.5 h-2.5 rounded-full border border-white/50" style={{ background: osc.color }}></div>
-                          <span className="font-bold uppercase tracking-widest" style={{ color: osc.color }}>{osc.name}</span>
-                      </div>
-                  ))}
+      {/* --- ESPECTRÓMETRO (No overflow-hidden so Portals/Visualizers adapt freely) --- */}
+      <div className="relative p-4 sm:p-6 rounded-3xl border border-white/10 bg-black/60 backdrop-blur-2xl shadow-[0_10px_40px_rgba(0,0,0,0.8),inset_0_0_20px_rgba(255,255,255,0.05)] space-y-5">
+        <div className="flex flex-col items-center text-center gap-4 border-b border-white/10 pb-5">
+          {/* Centered Spectrometer Title & Mode Tabs */}
+          <div className="flex flex-col items-center gap-3 w-full">
+            <div className="flex items-center justify-center gap-3">
+              <div className="p-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/30 shadow-[inset_0_0_15px_rgba(34,211,238,0.2)]">
+                <Icon name="Activity" size={22} className="text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]" />
               </div>
+              <div>
+                <h2 className="text-xl sm:text-2xl font-display font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-white to-purple-300 tracking-wide">
+                  Espectrómetro
+                </h2>
+                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">
+                  Análisis de Interferencia Constructiva, Diferenciales de Frecuencia (Δf) y Coherencia de Fase
+                </p>
+              </div>
+            </div>
+
+            {/* Spectrometer Tabs */}
+            <div className="flex flex-wrap items-center justify-center gap-1.5 bg-black/55 p-1.5 rounded-2xl border border-white/10">
+              <button
+                onClick={() => onVizTabChange && onVizTabChange('2d')}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  activeVizTab === '2d'
+                    ? 'bg-cyan-500/20 text-cyan-200 border border-cyan-400/50 shadow-[0_0_12px_rgba(34,211,238,0.25)]'
+                    : 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent'
+                }`}
+              >
+                <Icon name="Activity" size={14} />
+                <span>Ondas 2D</span>
+              </button>
+              <button
+                onClick={() => onVizTabChange && onVizTabChange('3d')}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  activeVizTab === '3d'
+                    ? 'bg-purple-500/20 text-purple-200 border border-purple-400/50 shadow-[0_0_12px_rgba(168,85,247,0.25)]'
+                    : 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent'
+                }`}
+              >
+                <Icon name="Hexagon" size={14} />
+                <span>Cimática 3D</span>
+              </button>
+              <button
+                onClick={() => onVizTabChange && onVizTabChange('spiral')}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  activeVizTab === 'spiral'
+                    ? 'bg-pink-500/20 text-pink-200 border border-pink-400/50 shadow-[0_0_12px_rgba(236,72,153,0.25)]'
+                    : 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent'
+                }`}
+              >
+                <Icon name="Aperture" size={14} />
+                <span>Espiral Holográfico</span>
+              </button>
+            </div>
           </div>
-        )}
 
-        {activeVizTab === '3d' && (
-          <CymaticsVisualizer3D
-            analyser={getCombinedAnalyser()}
-            activeFrequencies={activeFreqsList}
-            allOscillators={oscillators}
-            onUpdateOscillator={handleUpdateOscillator}
-            onRemoveOscillator={handleRemoveOscillator}
-            getOscillatorAnalyser={getOscillatorAnalyser}
-            isMasterPlaying={isMasterPlaying}
-            height={380}
-          />
-        )}
+          {/* Physical-Scientific Resonance Interactions Display */}
+          <div className="w-full bg-black/60 rounded-2xl border border-white/10 p-3.5 sm:p-4 max-h-72 overflow-y-auto custom-scrollbar shadow-[inset_0_0_30px_rgba(0,0,0,0.85)]">
+            {resonanceResults.length === 0 ? (
+              <div className="py-5 flex flex-col items-center justify-center text-center text-xs text-slate-400 gap-2">
+                <Icon name="Waves" size={24} className="text-cyan-500/50" />
+                <span className="font-bold uppercase tracking-widest text-[11px] text-slate-300">
+                  Sin interacciones espectrales entre pares activos
+                </span>
+                <span className="text-[11px] text-slate-500 max-w-lg">
+                  Activa al menos 2 osciladores dentro de un rango de diferencia ≤ 250 Hz o con proporción armónica exacta para observar interferencia binaural, modulación Δf, fase o consonancia.
+                </span>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-left">
+                {resonanceResults.map(res => {
+                  const style = ACCENT_STYLES[res.accentColor];
+                  const iconName = CLASSIFICATION_ICONS[res.classification];
+                  const deltaFormatted = res.deltaHz < 1 ? res.deltaHz.toFixed(3) : res.deltaHz.toFixed(2);
+                  return (
+                    <div
+                      key={res.id}
+                      className={`rounded-2xl border p-3.5 transition-all duration-300 flex flex-col gap-2.5 ${style.card}`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-2.5 min-w-0">
+                          <div className={`p-2 rounded-xl border shrink-0 ${style.iconBg}`}>
+                            <Icon name={iconName} size={17} className={style.iconText} />
+                          </div>
+                          <div className="min-w-0">
+                            <div className={`text-xs font-black uppercase tracking-wider leading-tight ${style.iconText}`}>
+                              {res.label}
+                            </div>
+                            <p className="text-[10px] text-slate-400 mt-0.5 leading-snug">
+                              {res.subtitle}
+                            </p>
+                          </div>
+                        </div>
 
-        {activeVizTab === 'spiral' && (
-          <SpiralVisualizer
-            analyser={getCombinedAnalyser()}
-            activeOscillators={oscillators}
-            allOscillators={oscillators}
-            onUpdateOscillator={handleUpdateOscillator}
-            onRemoveOscillator={handleRemoveOscillator}
-            getOscillatorAnalyser={getOscillatorAnalyser}
-            isMasterPlaying={isMasterPlaying}
-            height={380}
-          />
-        )}
+                        <div className="text-right shrink-0">
+                          <div className="text-base font-display font-black text-white leading-none">
+                            Δf {deltaFormatted} <span className="text-[10px] text-slate-400">Hz</span>
+                          </div>
+                          <div className="text-[10px] font-mono text-slate-400 mt-1">
+                            f₁+f₂ = {res.sumHz.toFixed(2)} Hz
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-white/10 text-[10px]">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className={`px-2 py-0.5 rounded-md border font-mono font-bold ${style.badge}`}>
+                            f₂:f₁ = {res.ratio}
+                          </span>
+                          {res.intervalName && (
+                            <span className="px-2 py-0.5 rounded-md border border-white/15 bg-white/5 text-white font-bold">
+                              {res.intervalName}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-slate-300 font-semibold">
+                          {res.sourceA} ({res.freqA.toFixed(1)} Hz) ↔ {res.sourceB} ({res.freqB.toFixed(1)} Hz)
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-400">
+                        <span className="font-bold text-slate-200">{res.bandName}</span>
+                        <span className="truncate">{res.bandDescription}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Visualizer Canvas Area */}
+        <div className="w-full">
+          {activeVizTab === '2d' && (
+            <div className="w-full min-h-[280px] sm:min-h-[340px] bg-black/85 rounded-2xl border border-white/10 overflow-hidden relative shadow-[inset_0_0_40px_rgba(0,0,0,0.9)]">
+              <Visualizer sources={visualizerSources} height={340} />
+              <div className="absolute top-3 right-3 flex flex-col gap-1.5 items-end pointer-events-none z-20">
+                <div className="flex items-center gap-2.5 px-3 py-1.5 bg-black/70 rounded-xl text-[10px] text-slate-300 border border-white/10 backdrop-blur-md">
+                  <div className="w-2.5 h-2.5 rounded-full bg-slate-500 border border-slate-400" />
+                  <span className="font-bold uppercase tracking-widest">Onda Combinada</span>
+                </div>
+                {oscillators.filter(o => o.isPlaying && o.isIndependent).map(osc => (
+                  <div key={osc.id} className="flex items-center gap-2.5 px-3 py-1.5 bg-black/70 rounded-xl text-[10px] text-white border border-white/10 backdrop-blur-md">
+                    <div className="w-2.5 h-2.5 rounded-full border border-white/50" style={{ background: osc.color }} />
+                    <span className="font-bold uppercase tracking-widest" style={{ color: osc.color }}>
+                      {osc.name}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {activeVizTab === '3d' && (
+            <CymaticsVisualizer3D
+              analyser={getCombinedAnalyser()}
+              activeFrequencies={activeFreqsList}
+              allOscillators={oscillators}
+              onUpdateOscillator={handleUpdateOscillator}
+              onRemoveOscillator={handleRemoveOscillator}
+              getOscillatorAnalyser={getOscillatorAnalyser}
+              isMasterPlaying={isMasterPlaying}
+              height={420}
+            />
+          )}
+
+          {activeVizTab === 'spiral' && (
+            <SpiralVisualizer
+              analyser={getCombinedAnalyser()}
+              activeOscillators={oscillators}
+              allOscillators={oscillators}
+              onUpdateOscillator={handleUpdateOscillator}
+              onRemoveOscillator={handleRemoveOscillator}
+              getOscillatorAnalyser={getOscillatorAnalyser}
+              isMasterPlaying={isMasterPlaying}
+              height={420}
+            />
+          )}
+        </div>
       </div>
 
-      {/* Global Controls */}
+      {/* --- Global Controls & Oscillator List Header (Collapsible Levelers) --- */}
       {oscillators.length > 0 && (
-        <div className="bg-black/40 border border-white/10 p-5 rounded-2xl backdrop-blur-xl flex flex-col md:flex-row flex-wrap items-center justify-center gap-4 md:gap-8 shadow-[0_0_30px_rgba(0,0,0,0.5)] relative overflow-hidden">
-            <div className="flex items-center gap-3 text-sm text-cyan-200 font-bold uppercase tracking-widest relative z-10 w-full md:w-auto justify-center md:justify-start">
-                <Icon name="Settings" size={18} className="text-cyan-400" />
-                Ajustes Globales
-            </div>
-            
-            <div className="flex items-center gap-3 relative z-10 bg-white/5 px-4 py-2 rounded-xl border border-white/5">
-                <span className="text-xs text-slate-400 uppercase font-bold tracking-wider">Volumen</span>
-                <input 
-                    type="range" min="0" max="1" step="0.01" defaultValue="0.5"
-                    onChange={(e) => audio.setGlobalVolume(parseFloat(e.target.value))}
-                    className="w-32 h-1.5 bg-slate-800 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-cyan-400 [&::-webkit-slider-thumb]:rounded-full"
-                />
-            </div>
+        <div className="art-nouveau-frame p-3.5 sm:p-4 rounded-2xl flex flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-2.5">
+            <button
+              onClick={() => setShowGlobalControls(prev => !prev)}
+              className="flex items-center gap-2 text-xs sm:text-sm morph-accent-text font-bold uppercase tracking-widest hover:opacity-90 transition-opacity"
+            >
+              <Icon name="Settings" size={16} />
+              <span>Ajustes Globales ({oscillators.length})</span>
+              <Icon name={showGlobalControls ? 'ChevronUp' : 'ChevronDown'} size={15} />
+            </button>
 
-            <button 
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => setShowGlobalControls(prev => !prev)}
+                className={`flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-xl border transition-all ${
+                  showGlobalControls ? 'morph-tab-active' : 'morph-btn-glass'
+                }`}
+              >
+                <Icon name="Sliders" size={13} />
+                <span>{showGlobalControls ? 'Ocultar Nivelador Global' : 'Niveladores Globales'}</span>
+              </button>
+
+              <button
+                onClick={() => setExpandAllOscillators(prev => !prev)}
+                className={`flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-xl border transition-all ${
+                  expandAllOscillators ? 'morph-tab-active' : 'morph-btn-glass'
+                }`}
+              >
+                <Icon name={expandAllOscillators ? 'ChevronUp' : 'ChevronDown'} size={14} />
+                <span>{expandAllOscillators ? 'Compactar Todas' : 'Desplegar Todas'}</span>
+              </button>
+            </div>
+          </div>
+
+          {showGlobalControls && (
+            <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-5 pt-3 border-t border-white/10 animate-fade-in">
+              <div className="flex items-center gap-3 bg-white/5 px-3.5 py-2 rounded-xl border border-white/10">
+                <span className="text-[11px] text-slate-300 uppercase font-bold tracking-wider">Volumen Global</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value={globalVolumeSlider}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value);
+                    setGlobalVolumeSlider(v);
+                    audio.setGlobalVolume(v);
+                  }}
+                  className="w-28 sm:w-36 h-1.5 bg-slate-800 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-cyan-400 [&::-webkit-slider-thumb]:rounded-full"
+                />
+                <span className="text-[11px] font-mono morph-accent-text w-9 text-right">{Math.round(globalVolumeSlider * 100)}%</span>
+              </div>
+
+              <button
                 onClick={() => {
                   history.pushState(oscillators);
                   audio.centerAllPositions();
                 }}
-                className="relative group flex items-center gap-2 text-xs font-bold uppercase tracking-wider px-5 py-2.5 bg-white/5 hover:bg-cyan-500/20 border border-white/10 hover:border-cyan-500/50 rounded-xl text-slate-300 hover:text-cyan-100 transition-all duration-300 z-10"
-            >
-                Centrar Posiciones
-            </button>
+                className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider px-4 py-2 morph-btn-glass rounded-xl"
+              >
+                <Icon name="Compass" size={14} className="morph-accent-text" />
+                <span>Centrar Posiciones</span>
+              </button>
 
-            <div className="flex items-center gap-3 relative z-10 bg-white/5 px-4 py-2 rounded-xl border border-white/5">
-                <span className="text-xs text-slate-400 uppercase font-bold tracking-wider">Onda</span>
-                <select 
-                    onChange={(e) => {
-                        if (e.target.value) {
-                            history.pushState(oscillators);
-                            audio.setGlobalWaveType(e.target.value as any);
-                            e.target.value = "";
-                        }
-                    }}
-                    className="bg-black/50 border border-white/10 rounded-lg text-xs text-cyan-200 font-bold uppercase tracking-wider px-3 py-1.5 focus:outline-none focus:border-cyan-500 cursor-pointer"
+              <div className="flex items-center gap-2.5 bg-white/5 px-3.5 py-2 rounded-xl border border-white/10">
+                <span className="text-[11px] text-slate-300 uppercase font-bold tracking-wider">Onda Global</span>
+                <select
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      history.pushState(oscillators);
+                      audio.setGlobalWaveType(e.target.value as WaveType);
+                      e.target.value = '';
+                    }
+                  }}
+                  className="bg-black/60 border border-white/15 rounded-lg text-xs morph-accent-text font-bold uppercase tracking-wider px-2.5 py-1 focus:outline-none focus:border-cyan-500 cursor-pointer"
                 >
-                    <option value="">(Cambiar todas)</option>
-                    <option value="sine">Senoidal</option>
-                    <option value="square">Cuadrada</option>
-                    <option value="sawtooth">Diente de sierra</option>
-                    <option value="triangle">Triangular</option>
+                  <option value="">(Cambiar todas)</option>
+                  <option value="sine">Senoidal</option>
+                  <option value="square">Cuadrada</option>
+                  <option value="sawtooth">Diente de sierra</option>
+                  <option value="triangle">Triangular</option>
                 </select>
+              </div>
             </div>
+          )}
         </div>
       )}
 
-      {/* Oscillator List */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-8">
+      {/* --- Oscillator List --- */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 items-start">
         {oscillators.map(osc => (
-            <OscillatorControls 
-                key={osc.id} 
-                osc={osc} 
-                update={handleUpdateOscillator} 
-                remove={handleRemoveOscillator}
-                analyser={getOscillatorAnalyser(osc.id)}
-            />
+          <OscillatorControls
+            key={osc.id}
+            osc={osc}
+            update={handleUpdateOscillator}
+            remove={handleRemoveOscillator}
+            analyser={getOscillatorAnalyser(osc.id)}
+            forceExpanded={expandAllOscillators}
+          />
         ))}
 
-        <button 
-            onClick={() => handleAddOscillator()}
-            className="group relative min-h-[400px] rounded-2xl border-2 border-dashed border-cyan-500/30 hover:border-cyan-400 bg-black/20 hover:bg-cyan-950/30 flex flex-col items-center justify-center gap-6 transition-all duration-500 overflow-hidden shadow-[0_0_30px_rgba(0,0,0,0.3)] hover:shadow-[0_0_50px_rgba(34,211,238,0.2)]"
+        <button
+          onClick={() => handleAddOscillator()}
+          disabled={!canEdit}
+          className="group relative min-h-[260px] rounded-2xl border-2 border-dashed border-cyan-500/30 hover:border-cyan-400 bg-black/25 hover:bg-cyan-950/30 flex flex-col items-center justify-center gap-4 p-6 transition-all duration-300 shadow-[0_0_30px_rgba(0,0,0,0.3)] hover:shadow-[0_0_40px_rgba(34,211,238,0.2)] disabled:opacity-50 disabled:cursor-not-allowed"
         >
-            <div className="relative w-24 h-24 rounded-full bg-cyan-950/50 border border-cyan-500/30 group-hover:border-cyan-400 flex items-center justify-center transition-all duration-500 group-hover:scale-110 shadow-[0_0_30px_rgba(34,211,238,0.1)]">
-                <Icon name="Zap" className="text-cyan-500/50 group-hover:text-cyan-300 w-10 h-10 transition-colors duration-500" />
-            </div>
-            
-            <div className="text-center relative z-10">
-                <h3 className="text-xl font-display font-black text-cyan-500/50 group-hover:text-cyan-200 tracking-widest uppercase mb-2 transition-colors duration-500">Añadir Frecuencia</h3>
-                <p className="text-xs text-slate-500 group-hover:text-cyan-400/70 uppercase tracking-widest font-bold transition-colors duration-500">Nueva capa armónica</p>
-            </div>
+          <div className="w-16 h-16 rounded-full bg-cyan-950/60 border border-cyan-500/35 group-hover:border-cyan-400 flex items-center justify-center transition-all duration-300 group-hover:scale-110">
+            <Icon name="Plus" className="text-cyan-400/80 group-hover:text-cyan-200 w-7 h-7 transition-colors" />
+          </div>
+
+          <div className="text-center">
+            <h3 className="text-base sm:text-lg font-display font-black text-cyan-400/80 group-hover:text-cyan-200 tracking-widest uppercase mb-1 transition-colors">
+              Añadir Frecuencia
+            </h3>
+            <p className="text-[11px] text-slate-500 group-hover:text-cyan-400/70 uppercase tracking-widest font-bold transition-colors">
+              Nueva capa armónica
+            </p>
+          </div>
         </button>
       </div>
-
     </div>
   );
 };

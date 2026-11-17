@@ -1,461 +1,1745 @@
-
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { FileSystemNode, PresetContent } from '../types';
+import {
+  FileSystemNode,
+  PresetContent,
+  CATEGORIES,
+  RADIATION_MEDIUMS,
+  RadiationMedium,
+  OscillatorState,
+  TechnicalRecommendation,
+  WaveType
+} from '../types';
 import { useFileSystem } from '../hooks/useFileSystem';
+import { autoSuggestTechnicalRecommendation } from '../utils/frequencyAnalysis';
 import Icon from './Icon';
-import { publishPresetToCloud, getCurrentStarseedUser, exportPresetToOSLibrary, importPresetsFromOSLibrary } from '../services/starseedAuth';
+import {
+  publishPresetToCloud,
+  getCurrentStarseedUser,
+  exportPresetToOSLibrary,
+  importPresetsFromOSLibrary
+} from '../services/starseedAuth';
 
 interface Props {
   mode: 'save' | 'load';
   onFileSelect: (content: PresetContent, mix?: boolean) => void;
   onClose: () => void;
   fs: ReturnType<typeof useFileSystem>;
-  currentConfig?: PresetContent; // For saving
+  currentConfig?: PresetContent;
 }
+
+const EDITABLE_CATEGORIES = CATEGORIES.filter(c => c.id !== 'all');
+
+const WAVE_OPTIONS: { value: WaveType; label: string }[] = [
+  { value: 'sine', label: 'Senoidal' },
+  { value: 'square', label: 'Cuadrada' },
+  { value: 'sawtooth', label: 'Sierra' },
+  { value: 'triangle', label: 'Triangular' }
+];
+
+const collectAllFolders = (node: FileSystemNode, prefix = ''): { id: string; label: string }[] => {
+  if (node.type !== 'folder') return [];
+  const currentLabel = prefix ? `${prefix} / ${node.name}` : node.name;
+  let result = [{ id: node.id, label: currentLabel }];
+  if (node.children) {
+    node.children.forEach(child => {
+      if (child.type === 'folder') {
+        result = result.concat(collectAllFolders(child, currentLabel));
+      }
+    });
+  }
+  return result;
+};
+
+const collectTreeFiles = (
+  node: FileSystemNode,
+  pathNames: string[] = []
+): { node: FileSystemNode; pathLabel: string }[] => {
+  let files: { node: FileSystemNode; pathLabel: string }[] = [];
+  if (node.type === 'file') {
+    files.push({ node, pathLabel: pathNames.join(' / ') || 'Raíz' });
+  } else if (node.children) {
+    const nextPath = node.id === 'root' ? pathNames : [...pathNames, node.name];
+    node.children.forEach(child => {
+      files = files.concat(collectTreeFiles(child, nextPath));
+    });
+  }
+  return files;
+};
 
 const FileExplorer: React.FC<Props> = ({ mode, onFileSelect, onClose, fs, currentConfig }) => {
   const [currentFolderId, setCurrentFolderId] = useState<string>('root');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // Folder creation & inline rename
   const [newFolderName, setNewFolderName] = useState('');
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
+  const [renamingNodeId, setRenamingNodeId] = useState<string | null>(null);
+  const [renamingName, setRenamingName] = useState('');
+
+  // Search, filter & view mode
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchGlobalTree, setSearchGlobalTree] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [viewLayout, setViewLayout] = useState<'grid' | 'list'>('grid');
+  const [expandedInspectorIds, setExpandedInspectorIds] = useState<Record<string, boolean>>({});
+
+  // Save mode state
   const [saveFileName, setSaveFileName] = useState('');
-  const [saveFileCategory, setSaveFileCategory] = useState('synergy');
+  const [saveFileCategory, setSaveFileCategory] = useState<string>('synergy');
   const [saveFileDescription, setSaveFileDescription] = useState('');
-  const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
-  const [editingName, setEditingName] = useState('');
-  
-  // Navigation Helper
-  const currentFolder = fs.findNode(currentFolderId, fs.root);
-  
+  const [showSaveTechPanel, setShowSaveTechPanel] = useState(false);
+  const [saveTechRec, setSaveTechRec] = useState<TechnicalRecommendation>(() =>
+    autoSuggestTechnicalRecommendation(currentConfig?.oscillators || [], 'synergy', '')
+  );
+
+  // Full particle editor modal state
+  const [editingParticle, setEditingParticle] = useState<FileSystemNode | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editCategory, setEditCategory] = useState('synergy');
+  const [editCustomCategory, setEditCustomCategory] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editOscillators, setEditOscillators] = useState<OscillatorState[]>([]);
+  const [editTechRec, setEditTechRec] = useState<TechnicalRecommendation>(() =>
+    autoSuggestTechnicalRecommendation([], 'synergy', '')
+  );
+
+  // Move modal state
+  const [movingNode, setMovingNode] = useState<FileSystemNode | null>(null);
+  const [moveTargetFolderId, setMoveTargetFolderId] = useState<string>('root');
+
+  // Publish-to-Vibras internal modal state
+  const [publishingNode, setPublishingNode] = useState<FileSystemNode | null>(null);
+  const [publishCategory, setPublishCategory] = useState<string>('synergy');
+  const [publishCustomCategory, setPublishCustomCategory] = useState<string>('');
+  const [isPublishing, setIsPublishing] = useState(false);
+
+  // Status banner feedback
+  const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const notify = (type: 'success' | 'error', text: string) => {
+    setStatusMessage({ type, text });
+    setTimeout(() => {
+      setStatusMessage(prev => (prev?.text === text ? null : prev));
+    }, 4500);
+  };
+
+  // Current folder lookup
+  const currentFolder = fs.findNode(currentFolderId, fs.root) || fs.root;
+
   // Breadcrumbs
-  const getBreadcrumbs = () => {
-    const crumbs = [];
-    let curr = currentFolder;
+  const breadcrumbs = useMemo(() => {
+    const crumbs: { id: string; name: string }[] = [];
+    let curr: FileSystemNode | null = currentFolder;
     while (curr && curr.id !== 'root') {
-      crumbs.unshift(curr);
-      curr = fs.findNode(curr.parentId!, fs.root);
+      crumbs.unshift({ id: curr.id, name: curr.name });
+      curr = curr.parentId ? fs.findNode(curr.parentId, fs.root) : null;
     }
     return [{ id: 'root', name: 'Raíz' }, ...crumbs];
-  };
+  }, [currentFolder, fs]);
+
+  const allFolders = useMemo(() => collectAllFolders(fs.root), [fs.root]);
+
+  const displayedItems = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+
+    if (searchGlobalTree && q) {
+      return collectTreeFiles(fs.root)
+        .filter(({ node }) => {
+          const cat = (node.content?.category || '').toLowerCase();
+          const desc = (node.content?.description || '').toLowerCase();
+          const matchText = node.name.toLowerCase().includes(q) || desc.includes(q) || cat.includes(q);
+          const matchCat = categoryFilter === 'all' || node.content?.category === categoryFilter;
+          return matchText && matchCat;
+        })
+        .map(({ node, pathLabel }) => ({ node, pathLabel }));
+    }
+
+    const children = [...(currentFolder?.children || [])].sort((a, b) => {
+      if (a.type === b.type) return a.name.localeCompare(b.name);
+      return a.type === 'folder' ? -1 : 1;
+    });
+
+    return children
+      .filter(node => {
+        if (node.type === 'folder') {
+          if (!q) return categoryFilter === 'all';
+          return node.name.toLowerCase().includes(q);
+        }
+        const cat = (node.content?.category || '').toLowerCase();
+        const desc = (node.content?.description || '').toLowerCase();
+        const matchQuery = !q || node.name.toLowerCase().includes(q) || desc.includes(q) || cat.includes(q);
+        const matchCat = categoryFilter === 'all' || node.content?.category === categoryFilter;
+        return matchQuery && matchCat;
+      })
+      .map(node => ({ node, pathLabel: '' }));
+  }, [currentFolder, fs.root, searchQuery, searchGlobalTree, categoryFilter]);
+
+  const selectedNode = useMemo(() => {
+    if (!selectedId) return null;
+    return fs.findNode(selectedId, fs.root);
+  }, [selectedId, fs]);
 
   const handleCreateFolder = () => {
     if (newFolderName.trim()) {
-      fs.createFolder(currentFolderId, newFolderName);
+      fs.createFolder(currentFolder.id, newFolderName.trim());
       setNewFolderName('');
       setIsCreatingFolder(false);
     }
   };
 
+  const handleAutoDetectSaveTech = () => {
+    const suggested = autoSuggestTechnicalRecommendation(
+      currentConfig?.oscillators || [],
+      saveFileCategory,
+      saveFileName
+    );
+    setSaveTechRec(suggested);
+    setShowSaveTechPanel(true);
+  };
+
   const handleSave = () => {
     if (saveFileName.trim() && currentConfig) {
-      const newConfig = {
+      const resolvedTech = showSaveTechPanel
+        ? saveTechRec
+        : autoSuggestTechnicalRecommendation(currentConfig.oscillators || [], saveFileCategory, saveFileName.trim());
+
+      const newConfig: PresetContent = {
         ...currentConfig,
         category: saveFileCategory,
-        description: saveFileDescription,
+        description: saveFileDescription.trim(),
+        technicalRecommendation: resolvedTech,
+        dateCreated: currentConfig.dateCreated || Date.now(),
+        updatedAt: Date.now()
       };
-      fs.saveFile(currentFolderId, saveFileName, newConfig);
+      fs.saveFile(currentFolder.id, saveFileName.trim(), newConfig);
       onClose();
     }
   };
 
-  // Sorting: Folders first, then Files
-  const sortedChildren = [...(currentFolder?.children || [])].sort((a, b) => {
-    if (a.type === b.type) return a.name.localeCompare(b.name);
-    return a.type === 'folder' ? -1 : 1;
-  });
+  const openParticleEditor = (node: FileSystemNode) => {
+    if (node.type !== 'file' || !node.content) return;
+    const cat = node.content.category || 'synergy';
+    const isKnownCat = EDITABLE_CATEGORIES.some(c => c.id === cat);
+    const oscs = (node.content.oscillators || []).map(o => ({ ...o }));
+    const tech =
+      node.content.technicalRecommendation ||
+      autoSuggestTechnicalRecommendation(oscs, cat, node.name);
+
+    setEditingParticle(node);
+    setEditName(node.name);
+    setEditCategory(isKnownCat ? cat : '__custom__');
+    setEditCustomCategory(isKnownCat ? '' : cat);
+    setEditDescription(node.content.description || '');
+    setEditOscillators(oscs);
+    setEditTechRec({
+      ...tech,
+      frequencyScales: { ...tech.frequencyScales }
+    });
+  };
+
+  const handleSaveParticleEdits = () => {
+    if (!editingParticle || !editName.trim()) return;
+    const finalCategory =
+      editCategory === '__custom__' ? editCustomCategory.trim() || 'synergy' : editCategory;
+
+    const updatedContent: PresetContent = {
+      ...(editingParticle.content || { oscillators: [], dateCreated: Date.now() }),
+      oscillators: editOscillators,
+      category: finalCategory,
+      description: editDescription.trim(),
+      technicalRecommendation: editTechRec,
+      updatedAt: Date.now()
+    };
+
+    fs.updateFileNode(editingParticle.id, {
+      name: editName.trim(),
+      content: updatedContent
+    });
+    setEditingParticle(null);
+    notify('success', `Partícula "${editName.trim()}" actualizada.`);
+  };
+
+  const toggleSaveMedium = (mediumId: RadiationMedium) => {
+    setSaveTechRec(prev => {
+      const exists = prev.recommendedMediums.includes(mediumId);
+      const next = exists
+        ? prev.recommendedMediums.filter(m => m !== mediumId)
+        : [...prev.recommendedMediums, mediumId];
+      return {
+        ...prev,
+        recommendedMediums: next.length > 0 ? next : ['acustica']
+      };
+    });
+  };
+
+  const toggleEditMedium = (mediumId: RadiationMedium) => {
+    setEditTechRec(prev => {
+      const exists = prev.recommendedMediums.includes(mediumId);
+      const next = exists
+        ? prev.recommendedMediums.filter(m => m !== mediumId)
+        : [...prev.recommendedMediums, mediumId];
+      return {
+        ...prev,
+        recommendedMediums: next.length > 0 ? next : ['acustica']
+      };
+    });
+  };
+
+  const toggleInspector = (id: string) => {
+    setExpandedInspectorIds(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const handleImportOS = async () => {
+    const user = await getCurrentStarseedUser();
+    if (!user) {
+      notify('error', 'Inicia sesión en StarSeed OS (Comunidad) para importar presets.');
+      return;
+    }
+    try {
+      const osPresets = await importPresetsFromOSLibrary(user.id);
+      osPresets.forEach(preset => {
+        fs.saveFileWithPath(preset.pathSegments, preset.name, preset.content);
+      });
+      notify(
+        'success',
+        `Se importaron ${osPresets.length} partículas desde tu biblioteca de StarSeed OS.`
+      );
+    } catch (err) {
+      console.error(err);
+      notify('error', 'Error al sincronizar presets desde StarSeed OS.');
+    }
+  };
+
+  const handleExportOS = async (node: FileSystemNode) => {
+    if (node.type !== 'file' || !node.content) return;
+    const user = await getCurrentStarseedUser();
+    if (!user) {
+      notify('error', 'Inicia sesión con StarSeed OS para exportar a la nube.');
+      return;
+    }
+    try {
+      await exportPresetToOSLibrary(node, user.id);
+      notify('success', `"${node.name}" guardado en tu Biblioteca de StarSeed OS.`);
+    } catch (err) {
+      console.error(err);
+      notify('error', 'Error al exportar a StarSeed OS.');
+    }
+  };
+
+  const openPublishConfirm = async (node: FileSystemNode) => {
+    if (node.type !== 'file' || !node.content) return;
+    const user = await getCurrentStarseedUser();
+    if (!user) {
+      notify('error', 'Inicia sesión con StarSeed OS para publicar en Vibras.');
+      return;
+    }
+    const existingCat = node.content.category || 'synergy';
+    const isKnown = EDITABLE_CATEGORIES.some(c => c.id === existingCat);
+    setPublishCategory(isKnown ? existingCat : '__custom__');
+    setPublishCustomCategory(isKnown ? '' : existingCat);
+    setPublishingNode(node);
+  };
+
+  const handleConfirmPublish = async () => {
+    if (!publishingNode || !publishingNode.content) return;
+    const user = await getCurrentStarseedUser();
+    if (!user) {
+      notify('error', 'Sesión StarSeed OS expirada.');
+      return;
+    }
+    setIsPublishing(true);
+    try {
+      const finalCategory =
+        publishCategory === '__custom__'
+          ? publishCustomCategory.trim() || 'synergy'
+          : publishCategory;
+      const tech =
+        publishingNode.content.technicalRecommendation ||
+        autoSuggestTechnicalRecommendation(
+          publishingNode.content.oscillators || [],
+          finalCategory,
+          publishingNode.name
+        );
+
+      const enrichedContent: PresetContent = {
+        ...publishingNode.content,
+        category: finalCategory,
+        authorId: user.id,
+        authorName: user.displayName,
+        technicalRecommendation: tech
+      };
+
+      await publishPresetToCloud(
+        { ...publishingNode, content: enrichedContent },
+        user.id,
+        true
+      );
+      fs.updateFileNode(publishingNode.id, { content: enrichedContent });
+      notify('success', `"${publishingNode.name}" publicado en Vibras (${finalCategory}).`);
+      setPublishingNode(null);
+    } catch (err) {
+      console.error(err);
+      notify('error', 'Error al publicar la partícula en la comunidad.');
+    } finally {
+      setIsPublishing(false);
+    }
+  };
 
   return createPortal(
-    <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/90 backdrop-blur-xl p-4 sm:p-6 animate-fade-in">
-      <div className="w-full max-w-5xl bg-black/60 border border-cyan-500/20 rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.9),inset_0_0_30px_rgba(34,211,238,0.05)] flex flex-col h-[90vh] sm:h-[85vh] overflow-hidden relative backdrop-blur-2xl">
-        <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-purple-500/5 to-pink-500/10 pointer-events-none"></div>
-        <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent"></div>
-        
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/90 backdrop-blur-xl p-2 sm:p-5 animate-fade-in">
+      <div className="w-full max-w-6xl bg-[#060913]/95 border border-cyan-500/25 rounded-3xl shadow-[0_0_60px_rgba(0,0,0,0.95),inset_0_0_30px_rgba(34,211,238,0.06)] flex flex-col max-h-[94vh] sm:h-[90vh] overflow-hidden relative backdrop-blur-2xl">
+        <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/8 via-purple-500/5 to-pink-500/8 pointer-events-none" />
+
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-white/10 bg-black/40 relative z-10">
-          <div className="flex items-center gap-4">
-            <div className={`p-3 rounded-2xl border ${mode === 'save' ? 'bg-cyan-950/40 border-cyan-500/30 text-cyan-400 shadow-[inset_0_0_15px_rgba(34,211,238,0.2)]' : 'bg-purple-950/40 border-purple-500/30 text-purple-400 shadow-[inset_0_0_15px_rgba(168,85,247,0.2)]'}`}>
-               <Icon name={mode === 'save' ? 'Save' : 'Folder'} size={28} className="drop-shadow-[0_0_8px_currentColor]" />
+        <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-white/10 bg-black/50 relative z-10 shrink-0 gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div
+              className={`p-2.5 sm:p-3 rounded-2xl border shrink-0 ${
+                mode === 'save'
+                  ? 'bg-cyan-950/50 border-cyan-500/40 text-cyan-300'
+                  : 'bg-purple-950/50 border-purple-500/40 text-purple-300'
+              }`}
+            >
+              <Icon name={mode === 'save' ? 'Save' : 'Folder'} size={22} />
             </div>
-            <div>
-                <h2 className="text-2xl font-display font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
-                    {mode === 'save' ? 'Guardar Partícula' : 'Cargar Partícula'}
-                </h2>
-                <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-cyan-200/60 mt-1">Sistema Cuántico de Partículas</p>
+            <div className="min-w-0">
+              <h2 className="text-lg sm:text-2xl font-display font-black text-white truncate">
+                {mode === 'save' ? 'Guardar Partícula Personal' : 'Explorador de Partículas y Carpetas'}
+              </h2>
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-cyan-200/60">
+                Archivo Cuántico Local & Sincronía StarSeed OS
+              </p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-colors text-slate-400 hover:text-white">
-            <Icon name="X" size={24} />
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Cerrar explorador"
+            title="Cerrar explorador"
+            className="p-2 hover:bg-white/10 rounded-full transition-colors text-slate-400 hover:text-white cursor-pointer shrink-0"
+          >
+            <Icon name="X" size={22} />
           </button>
         </div>
 
-        {/* Toolbar & Breadcrumbs */}
-        <div className="flex items-center justify-between px-6 py-4 bg-black/40 border-b border-white/5 relative z-10 shadow-[inset_0_0_20px_rgba(0,0,0,0.5)]">
-           {/* Breadcrumbs */}
-           <div className="flex items-center gap-2 text-sm overflow-x-auto no-scrollbar">
-              {getBreadcrumbs().map((crumb, idx, arr) => (
-                <div key={crumb.id} className="flex items-center gap-2 shrink-0">
-                   <button 
-                     onClick={() => setCurrentFolderId(crumb.id)}
-                     className={`hover:text-cyan-300 transition-colors font-medium tracking-wide ${idx === arr.length - 1 ? 'text-cyan-100 drop-shadow-[0_0_5px_rgba(34,211,238,0.5)]' : 'text-slate-500'}`}
-                   >
-                     {crumb.name}
-                   </button>
-                   {idx < arr.length - 1 && <Icon name="ChevronRight" size={14} className="text-slate-700" />}
-                </div>
-              ))}
-           </div>
-
-            {/* Actions */}
-           <div className="flex gap-3">
-             <button 
-               onClick={async () => {
-                 const user = await getCurrentStarseedUser();
-                 if (!user) {
-                   alert('Inicia sesión en Starseed OS (Pestaña Comunidad) para importar presets.');
-                   return;
-                 }
-                 try {
-                   const osPresets = await importPresetsFromOSLibrary(user.id);
-                   osPresets.forEach(preset => {
-                     fs.saveFileWithPath(preset.pathSegments, preset.name, preset.content);
-                   });
-                   alert(`Se importaron y sincronizaron inteligentemente ${osPresets.length} presets desde los folders de tu biblioteca de Starseed OS.`);
-                 } catch (err) {
-                   console.error(err);
-                   alert('Error al sincronizar presets desde OS.');
-                 }
-               }}
-               className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-950/30 hover:bg-amber-900/50 text-xs font-bold uppercase tracking-wider text-amber-300 border border-amber-500/20 shadow-[inset_0_0_10px_rgba(245,158,11,0.1)] transition-all hover:shadow-[0_0_15px_rgba(245,158,11,0.2)]"
-               title="Sincronizar carpetas y presets desde Starseed OS"
-             >
-               <Icon name="DownloadCloud" size={14} />
-               Importar OS
-             </button>
-             {!isCreatingFolder && (
-               <button 
-                 onClick={() => setIsCreatingFolder(true)}
-                 className="flex items-center gap-2 px-4 py-2 rounded-xl bg-cyan-950/30 hover:bg-cyan-900/50 text-xs font-bold uppercase tracking-wider text-cyan-300 border border-cyan-500/20 shadow-[inset_0_0_10px_rgba(34,211,238,0.1)] transition-all hover:shadow-[0_0_15px_rgba(34,211,238,0.2)]"
-               >
-                 <Icon name="Plus" size={14} />
-                 Nueva Carpeta
-               </button>
-             )}
-           </div>
-        </div>
-
-        {/* Create Folder Input */}
-        {isCreatingFolder && (
-          <div className="px-6 py-4 bg-cyan-950/20 border-b border-cyan-500/20 flex items-center gap-4 animate-fade-in shadow-[inset_0_0_20px_rgba(34,211,238,0.05)] relative z-10">
-            <div className="p-2 bg-cyan-500/10 rounded-lg border border-cyan-500/20">
-               <Icon name="Folder" size={18} className="text-cyan-400 drop-shadow-[0_0_5px_rgba(34,211,238,0.8)]" />
-            </div>
-            <input 
-              autoFocus
-              type="text" 
-              placeholder="Nombre de la carpeta..."
-              value={newFolderName}
-              onChange={(e) => setNewFolderName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleCreateFolder()}
-              className="bg-black/40 border border-cyan-500/30 rounded-xl text-white text-sm focus:outline-none focus:border-cyan-400 focus:shadow-[0_0_15px_rgba(34,211,238,0.2)] flex-1 py-2 px-4 transition-all placeholder:text-slate-600"
-            />
-            <button onClick={handleCreateFolder} className="text-xs font-bold uppercase tracking-wider bg-cyan-500/20 text-cyan-300 px-5 py-2.5 rounded-xl hover:bg-cyan-500/40 border border-cyan-500/30 transition-all shadow-[0_0_10px_rgba(34,211,238,0.1)] hover:shadow-[0_0_15px_rgba(34,211,238,0.3)]">Crear</button>
-            <button onClick={() => setIsCreatingFolder(false)} className="text-xs font-bold uppercase tracking-wider text-slate-400 hover:text-white px-4 py-2.5 rounded-xl hover:bg-white/5 transition-colors">Cancelar</button>
+        {/* Status Toast */}
+        {statusMessage && (
+          <div
+            className={`mx-4 sm:mx-6 mt-3 px-4 py-2.5 rounded-xl border text-xs font-semibold flex items-center justify-between gap-2 relative z-10 ${
+              statusMessage.type === 'success'
+                ? 'bg-emerald-950/70 border-emerald-500/40 text-emerald-200'
+                : 'bg-red-950/70 border-red-500/40 text-red-200'
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              <Icon name={statusMessage.type === 'success' ? 'Check' : 'AlertCircle'} size={14} />
+              {statusMessage.text}
+            </span>
+            <button onClick={() => setStatusMessage(null)} className="opacity-70 hover:opacity-100">
+              <Icon name="X" size={14} />
+            </button>
           </div>
         )}
 
-        {/* Grid Content */}
-        <div className="flex-1 overflow-y-auto p-6 bg-transparent relative z-0 custom-scrollbar">
-           {sortedChildren.length === 0 ? (
-             <div className="h-full flex flex-col items-center justify-center text-slate-600">
-               <div className="p-6 rounded-full bg-white/5 border border-white/10 mb-6 shadow-[inset_0_0_20px_rgba(255,255,255,0.02)]">
-                  <Icon name="Folder" size={48} className="opacity-20" />
-               </div>
-               <p className="text-sm font-medium tracking-widest uppercase opacity-50">Carpeta vacía</p>
-             </div>
-           ) : (
-             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                {sortedChildren.map(node => (
-                  <div 
-                    key={node.id}
-                    onClick={() => {
-                        if (node.type === 'folder') setCurrentFolderId(node.id);
-                        else setSelectedId(node.id);
-                    }}
-                    onDoubleClick={() => {
-                        if (node.type === 'file' && node.content) {
-                            onFileSelect(node.content, false);
-                            onClose();
-                        }
-                    }}
-                    className={`
-                      relative group cursor-pointer rounded-2xl flex flex-col transition-all duration-300 border overflow-hidden
-                      ${selectedId === node.id 
-                          ? 'bg-cyan-950/40 border-cyan-500/50 shadow-[0_0_20px_rgba(34,211,238,0.2),inset_0_0_15px_rgba(34,211,238,0.1)] -translate-y-1' 
-                          : 'bg-black/40 border-white/5 hover:bg-black/60 hover:border-white/20 hover:-translate-y-0.5'}
-                      ${node.type === 'file' ? 'p-4 col-span-1 sm:col-span-1 aspect-[4/3]' : 'items-center justify-center gap-3 p-4 aspect-square'}
-                    `}
-                  >
-                     {node.type === 'folder' ? (
-                       <>
-                         <div className={`
-                           w-14 h-14 rounded-2xl flex items-center justify-center transition-transform duration-500 group-hover:scale-110 border
-                           bg-amber-950/30 text-amber-400 border-amber-500/20 shadow-[inset_0_0_15px_rgba(245,158,11,0.1)] group-hover:shadow-[0_0_15px_rgba(245,158,11,0.2)]
-                         `}>
-                            <Icon name="Folder" size={28} className="drop-shadow-[0_0_5px_currentColor]" />
-                         </div>
-                         
-                         {editingNodeId === node.id ? (
-                            <input 
-                              autoFocus
-                              type="text"
-                              value={editingName}
-                              onChange={(e) => setEditingName(e.target.value)}
-                              onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                      if (editingName.trim()) fs.renameNode(node.id, editingName.trim());
-                                      setEditingNodeId(null);
-                                  } else if (e.key === 'Escape') {
-                                      setEditingNodeId(null);
-                                  }
-                              }}
-                              onBlur={() => {
-                                  if (editingName.trim()) fs.renameNode(node.id, editingName.trim());
-                                  setEditingNodeId(null);
-                              }}
-                              className="w-full bg-black/80 border border-cyan-500/50 text-white text-xs font-medium text-center rounded-lg px-2 py-1.5 focus:outline-none focus:border-cyan-400 focus:shadow-[0_0_10px_rgba(34,211,238,0.2)]"
-                              onClick={(e) => e.stopPropagation()}
-                            />
-                         ) : (
-                            <span className={`text-xs font-medium break-words w-full line-clamp-2 text-center leading-relaxed transition-colors ${selectedId === node.id ? 'text-cyan-100' : 'text-slate-300 group-hover:text-white'}`}>
-                                {node.name}
-                            </span>
-                         )}
-                       </>
-                     ) : (
-                       // Rich File Card
-                       <div className="flex flex-col h-full w-full text-left relative z-10">
-                         <div className="flex justify-between items-start mb-2">
-                           <div className={`p-2 rounded-xl bg-purple-950/30 text-purple-400 border border-purple-500/20 shadow-[inset_0_0_10px_rgba(168,85,247,0.1)]`}>
-                             <Icon name="FileAudio" size={16} />
-                           </div>
-                           <span className="text-[9px] uppercase tracking-wider bg-white/10 px-2 py-0.5 rounded-full text-slate-300 font-mono">
-                             {node.content?.oscillators?.length || 0} Osc
-                           </span>
-                         </div>
-                         
-                         {editingNodeId === node.id ? (
-                            <input 
-                              autoFocus
-                              type="text"
-                              value={editingName}
-                              onChange={(e) => setEditingName(e.target.value)}
-                              onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                      if (editingName.trim()) fs.renameNode(node.id, editingName.trim());
-                                      setEditingNodeId(null);
-                                  } else if (e.key === 'Escape') {
-                                      setEditingNodeId(null);
-                                  }
-                              }}
-                              onBlur={() => {
-                                  if (editingName.trim()) fs.renameNode(node.id, editingName.trim());
-                                  setEditingNodeId(null);
-                              }}
-                              className="w-full bg-black/80 border border-cyan-500/50 text-white text-sm font-bold rounded-lg px-2 py-1 focus:outline-none focus:border-cyan-400 focus:shadow-[0_0_10px_rgba(34,211,238,0.2)] mb-1"
-                              onClick={(e) => e.stopPropagation()}
-                            />
-                         ) : (
-                           <h4 className="font-bold text-white text-sm mb-1 truncate">{node.name}</h4>
-                         )}
-
-                         <p className="text-[10px] text-slate-400 line-clamp-2 flex-grow">
-                           {node.content?.description || 'Sin descripción'}
-                         </p>
-
-                         {node.content?.category && (
-                           <div className="mt-2 text-[9px] uppercase font-bold tracking-widest text-cyan-500/80">
-                             {node.content.category}
-                           </div>
-                         )}
-                       </div>
-                     )}
-                     
-                     {/* Hover Actions */}
-                     <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex gap-1 bg-black/60 backdrop-blur-md rounded-lg p-1 border border-white/10 shadow-lg z-20">
-                         <button 
-                           onClick={async (e) => {
-                             e.stopPropagation();
-                             if (node.type === 'file' && node.content) {
-                               const user = await getCurrentStarseedUser();
-                               if (!user) {
-                                 alert('Debes iniciar sesión con Starseed OS (Pestaña Comunidad) para usar la nube.');
-                                 return;
-                               }
-                               try {
-                                 await exportPresetToOSLibrary(node, user.id);
-                                 alert('¡Preset guardado en tu Biblioteca de Starseed OS!');
-                               } catch (err) {
-                                 console.error(err);
-                                 alert('Error al exportar a Starseed OS.');
-                               }
-                             }
-                           }}
-                           className={`p-1.5 bg-black/50 hover:bg-amber-500/50 rounded-md text-white backdrop-blur-sm transition-colors ${node.type === 'folder' ? 'hidden' : ''}`}
-                           title="Exportar a la Biblioteca de Starseed OS"
-                        >
-                            <Icon name="Cloud" size={12} />
-                        </button>
-                         <button 
-                           onClick={async (e) => {
-                             e.stopPropagation();
-                             if (node.type === 'file' && node.content) {
-                               const user = await getCurrentStarseedUser();
-                               if (!user) {
-                                 alert('Debes iniciar sesión con Starseed OS (Pestaña Comunidad) para publicar presets.');
-                                 return;
-                               }
-                               const customCategory = window.prompt('Ingresa la categoría o carpeta pública para este preset (ej. Meditación, Solfeggio, Viaje Astral):', node.content.category || 'Varios');
-                               if (customCategory === null) return; // User cancelled
-                               
-                               try {
-                                 // Add custom category to the preset content before saving
-                                 node.content.category = customCategory.trim() || 'Varios';
-                                 
-                                 await publishPresetToCloud(node, user.id, true);
-                                 alert(`¡Preset publicado en Vibras bajo la categoría "${node.content.category}" con éxito!`);
-                               } catch (err) {
-                                 console.error(err);
-                                 alert('Error al publicar el preset.');
-                               }
-                             }
-                           }}
-                           className={`p-1.5 bg-black/50 hover:bg-cyan-500/50 rounded-md text-white backdrop-blur-sm transition-colors ${node.type === 'folder' ? 'hidden' : ''}`}
-                           title="Publicar en Comunidad (Vibras)"
-                        >
-                            <Icon name="Globe" size={12} />
-                        </button>
-                        <button 
-                           onClick={(e) => {
-                             e.stopPropagation();
-                             setEditingNodeId(node.id);
-                             setEditingName(node.name);
-                           }}
-                           className="p-1.5 bg-black/50 hover:bg-cyan-500/50 rounded-md text-white backdrop-blur-sm transition-colors"
-                           title="Renombrar"
-                        >
-                            <Icon name="Edit2" size={12} />
-                        </button>
-                        <button 
-                           onClick={(e) => {
-                             e.stopPropagation();
-                             if(confirm('¿Borrar este elemento?')) fs.deleteNode(node.id);
-                           }}
-                           className="p-1.5 bg-black/50 hover:bg-red-500/50 rounded-md text-white backdrop-blur-sm transition-colors"
-                           title="Eliminar"
-                        >
-                            <Icon name="Trash2" size={12} />
-                        </button>
-                     </div>
-                  </div>
-                ))}
-             </div>
-           )}
-        </div>
-
-        {/* Footer Actions */}
-        <div className="p-6 border-t border-white/10 bg-black/60 backdrop-blur-xl flex flex-col md:flex-row gap-6 items-center justify-between relative z-10 shadow-[0_-10px_30px_rgba(0,0,0,0.5)]">
-           <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 hidden sm:block">
-             {selectedId ? 'Elemento seleccionado' : 'Selecciona un archivo o carpeta'}
-           </div>
-
-           <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
-             {mode === 'save' && (
-               <div className="flex-1 sm:w-80 relative flex flex-col gap-2">
-                  <div className="relative">
-                    <input 
-                      type="text" 
-                      placeholder="Nombre del archivo..."
-                      value={saveFileName}
-                      onChange={(e) => setSaveFileName(e.target.value)}
-                      className="w-full bg-black/60 border border-cyan-500/50 rounded-xl pl-4 pr-16 py-3 text-sm text-white focus:border-cyan-400 focus:shadow-[0_0_15px_rgba(34,211,238,0.4)] focus:outline-none transition-all placeholder:text-slate-500"
-                    />
-                    <div className="absolute right-4 top-3.5 text-cyan-500/50 pointer-events-none text-xs font-bold font-mono">.omni</div>
-                  </div>
-                  
-                  <div className="flex gap-2">
-                    <select
-                      value={saveFileCategory}
-                      onChange={(e) => setSaveFileCategory(e.target.value)}
-                      className="w-1/3 bg-black/60 border border-cyan-500/30 rounded-xl px-2 py-2 text-xs text-white focus:border-cyan-400 focus:outline-none transition-all"
-                    >
-                      <option value="brain">Neuroacústica</option>
-                      <option value="pyramid">Megalitos</option>
-                      <option value="music">Música Sagrada</option>
-                      <option value="chakras">Chakras & Vórtex</option>
-                      <option value="rhythms">Ritmos e Isocrónicos</option>
-                      <option value="microtonal">Pitagóricas & Microtonales</option>
-                      <option value="synergy">Sinergias Maestras</option>
-                    </select>
-                    
-                    <input 
-                      type="text" 
-                      placeholder="Breve descripción..."
-                      value={saveFileDescription}
-                      onChange={(e) => setSaveFileDescription(e.target.value)}
-                      className="w-2/3 bg-black/60 border border-cyan-500/30 rounded-xl px-3 py-2 text-xs text-white focus:border-cyan-400 focus:outline-none transition-all placeholder:text-slate-500"
-                    />
-                  </div>
-               </div>
-             )}
-
-             {mode === 'load' && (
-                <button 
-                    onClick={() => {
-                        if (selectedId) {
-                            const node = sortedChildren.find(n => n.id === selectedId);
-                            if (node && node.content) {
-                                onFileSelect(node.content, true);
-                                onClose();
-                            }
-                        }
-                    }}
-                    disabled={!selectedId}
-                    className={`
-                      w-full sm:w-auto px-8 py-3 rounded-xl font-bold uppercase tracking-widest text-xs transition-all duration-300 border
-                      ${selectedId 
-                        ? 'bg-purple-950/40 text-purple-200 border-purple-500/50 hover:bg-purple-900/60 hover:border-purple-400 hover:shadow-[0_0_20px_rgba(168,85,247,0.4),inset_0_0_10px_rgba(168,85,247,0.2)] hover:-translate-y-0.5' 
-                        : 'bg-white/5 text-slate-500 border-white/10 cursor-not-allowed'}
-                    `}
+        {/* Toolbar: Breadcrumbs & Top Actions */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 px-4 sm:px-6 py-3 bg-black/40 border-b border-white/10 relative z-10 shrink-0">
+          {/* Interactive Breadcrumbs */}
+          <div className="flex items-center gap-1.5 text-xs sm:text-sm overflow-x-auto no-scrollbar py-1">
+            {breadcrumbs.map((crumb, idx, arr) => (
+              <div key={crumb.id} className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCurrentFolderId(crumb.id);
+                    setSearchGlobalTree(false);
+                  }}
+                  className={`px-2.5 py-1 rounded-lg transition-colors font-semibold cursor-pointer ${
+                    idx === arr.length - 1
+                      ? 'bg-cyan-500/15 text-cyan-200 border border-cyan-500/30'
+                      : 'text-slate-400 hover:text-white hover:bg-white/5'
+                  }`}
                 >
-                    Mezclar
+                  {crumb.name}
                 </button>
-             )}
+                {idx < arr.length - 1 && <Icon name="ChevronRight" size={14} className="text-slate-600" />}
+              </div>
+            ))}
+          </div>
 
-             <button 
-                onClick={() => {
-                    if (mode === 'save') handleSave();
-                    else if (selectedId) {
-                        const node = sortedChildren.find(n => n.id === selectedId);
-                        if (node && node.content) {
-                            onFileSelect(node.content, false);
-                            onClose();
-                        }
-                    }
-                }}
-                disabled={mode === 'save' ? !saveFileName : !selectedId}
-                className={`
-                  w-full sm:w-auto px-8 py-3 rounded-xl font-bold uppercase tracking-widest text-xs transition-all duration-300 border
-                  ${(mode === 'save' ? saveFileName : selectedId) 
-                    ? 'bg-cyan-950/40 text-cyan-200 border-cyan-500/50 hover:bg-cyan-900/60 hover:border-cyan-400 hover:shadow-[0_0_20px_rgba(34,211,238,0.4),inset_0_0_10px_rgba(34,211,238,0.2)] hover:-translate-y-0.5' 
-                    : 'bg-white/5 text-slate-500 border-white/10 cursor-not-allowed'}
-                `}
-             >
-               {mode === 'save' ? 'Guardar' : 'Cargar'}
-             </button>
-           </div>
+          {/* Search, Category, View & Actions */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Search Input */}
+            <div className="relative flex-1 sm:flex-none sm:w-52">
+              <Icon name="Search" size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Buscar partícula o carpeta..."
+                className="w-full bg-black/60 border border-white/10 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-400/50 placeholder:text-slate-500"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setSearchGlobalTree(v => !v)}
+              className={`px-2.5 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider border transition-colors cursor-pointer ${
+                searchGlobalTree
+                  ? 'bg-purple-500/20 border-purple-400/50 text-purple-200'
+                  : 'bg-white/5 border-white/10 text-slate-400 hover:text-white'
+              }`}
+              title="Buscar en todo el árbol de carpetas"
+            >
+              Todo el árbol
+            </button>
+
+            {/* Category Filter */}
+            <select
+              value={categoryFilter}
+              onChange={e => setCategoryFilter(e.target.value)}
+              className="bg-black/60 border border-white/10 rounded-xl px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-400/50 cursor-pointer"
+            >
+              <option value="all" className="bg-slate-900">Todas las categorías</option>
+              {EDITABLE_CATEGORIES.map(cat => (
+                <option key={cat.id} value={cat.id} className="bg-slate-900">
+                  {cat.label}
+                </option>
+              ))}
+            </select>
+
+            {/* Grid / List Toggle */}
+            <div className="flex bg-black/60 border border-white/10 rounded-xl p-0.5">
+              <button
+                type="button"
+                onClick={() => setViewLayout('grid')}
+                className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                  viewLayout === 'grid' ? 'bg-cyan-500/20 text-cyan-300' : 'text-slate-400 hover:text-white'
+                }`}
+                title="Vista cuadrícula"
+              >
+                <Icon name="LayoutGrid" size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewLayout('list')}
+                className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                  viewLayout === 'list' ? 'bg-cyan-500/20 text-cyan-300' : 'text-slate-400 hover:text-white'
+                }`}
+                title="Vista lista"
+              >
+                <Icon name="List" size={14} />
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleImportOS}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-950/40 hover:bg-amber-900/50 text-[11px] font-bold uppercase tracking-wider text-amber-300 border border-amber-500/30 transition-all cursor-pointer"
+              title="Sincronizar carpetas y presets desde StarSeed OS"
+            >
+              <Icon name="CloudDownload" size={14} />
+              <span className="hidden sm:inline">Importar OS</span>
+            </button>
+
+            {!isCreatingFolder && (
+              <button
+                type="button"
+                onClick={() => setIsCreatingFolder(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-950/40 hover:bg-cyan-900/50 text-[11px] font-bold uppercase tracking-wider text-cyan-300 border border-cyan-500/30 transition-all cursor-pointer"
+              >
+                <Icon name="Plus" size={14} />
+                <span>Carpeta</span>
+              </button>
+            )}
+          </div>
         </div>
 
+        {/* Create Folder Bar */}
+        {isCreatingFolder && (
+          <div className="px-4 sm:px-6 py-3 bg-cyan-950/20 border-b border-cyan-500/20 flex flex-wrap items-center gap-3 relative z-10 shrink-0">
+            <Icon name="Folder" size={18} className="text-cyan-400" />
+            <input
+              autoFocus
+              type="text"
+              placeholder="Nombre de la nueva carpeta..."
+              value={newFolderName}
+              onChange={e => setNewFolderName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleCreateFolder()}
+              className="bg-black/60 border border-cyan-500/30 rounded-xl text-white text-xs sm:text-sm focus:outline-none focus:border-cyan-400 flex-1 min-w-[180px] py-2 px-3"
+            />
+            <button
+              type="button"
+              onClick={handleCreateFolder}
+              className="text-xs font-bold uppercase tracking-wider bg-cyan-500/20 text-cyan-200 px-4 py-2 rounded-xl hover:bg-cyan-500/35 border border-cyan-500/40 cursor-pointer"
+            >
+              Crear
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsCreatingFolder(false)}
+              className="text-xs font-bold uppercase tracking-wider text-slate-400 hover:text-white px-3 py-2 rounded-xl hover:bg-white/5 cursor-pointer"
+            >
+              Cancelar
+            </button>
+          </div>
+        )}
+
+        {/* Content Area */}
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 custom-scrollbar relative z-0">
+          {displayedItems.length === 0 ? (
+            <div className="h-full min-h-[180px] flex flex-col items-center justify-center text-slate-500 text-center py-8">
+              <div className="p-5 rounded-full bg-white/5 border border-white/10 mb-4">
+                <Icon name="Folder" size={40} className="opacity-30" />
+              </div>
+              <p className="text-xs font-bold tracking-widest uppercase">
+                {searchQuery ? 'Sin coincidencias para tu búsqueda' : 'Carpeta vacía'}
+              </p>
+              <p className="text-[11px] text-slate-500 mt-1">
+                {mode === 'save'
+                  ? 'Crea una carpeta nueva o guarda tu partícula directamente aquí.'
+                  : 'Importa desde StarSeed OS o guarda partículas desde el Generador.'}
+              </p>
+            </div>
+          ) : (
+            <div
+              className={
+                viewLayout === 'grid'
+                  ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4'
+                  : 'flex flex-col gap-3'
+              }
+            >
+              {displayedItems.map(({ node, pathLabel }) => {
+                if (node.type === 'folder') {
+                  return (
+                    <div
+                      key={node.id}
+                      onClick={() => setCurrentFolderId(node.id)}
+                      className={`group cursor-pointer rounded-2xl border bg-black/45 border-white/10 hover:border-amber-400/40 hover:bg-black/65 transition-all p-4 flex items-center justify-between gap-3`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="w-11 h-11 rounded-xl bg-amber-950/40 text-amber-400 border border-amber-500/30 flex items-center justify-center shrink-0">
+                          <Icon name="FolderOpen" size={22} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          {renamingNodeId === node.id ? (
+                            <input
+                              autoFocus
+                              type="text"
+                              value={renamingName}
+                              onChange={e => setRenamingName(e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') {
+                                  if (renamingName.trim()) fs.renameNode(node.id, renamingName.trim());
+                                  setRenamingNodeId(null);
+                                } else if (e.key === 'Escape') {
+                                  setRenamingNodeId(null);
+                                }
+                              }}
+                              onBlur={() => {
+                                if (renamingName.trim()) fs.renameNode(node.id, renamingName.trim());
+                                setRenamingNodeId(null);
+                              }}
+                              onClick={e => e.stopPropagation()}
+                              className="w-full bg-black/80 border border-cyan-500/50 text-white text-xs font-bold rounded-lg px-2 py-1 focus:outline-none"
+                            />
+                          ) : (
+                            <>
+                              <h4 className="font-bold text-sm text-white truncate">{node.name}</h4>
+                              <span className="text-[10px] text-slate-400">
+                                {node.children?.length || 0} elementos
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRenamingNodeId(node.id);
+                            setRenamingName(node.name);
+                          }}
+                          className="p-1.5 rounded-lg bg-white/5 hover:bg-cyan-500/20 text-slate-300 hover:text-cyan-200 cursor-pointer"
+                          title="Renombrar carpeta"
+                        >
+                          <Icon name="Edit2" size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMovingNode(node);
+                            setMoveTargetFolderId(node.parentId || 'root');
+                          }}
+                          className="p-1.5 rounded-lg bg-white/5 hover:bg-purple-500/20 text-slate-300 hover:text-purple-200 cursor-pointer"
+                          title="Mover carpeta"
+                        >
+                          <Icon name="Move" size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (confirm(`¿Eliminar la carpeta "${node.name}" y todo su contenido?`)) {
+                              fs.deleteNode(node.id);
+                            }
+                          }}
+                          className="p-1.5 rounded-lg bg-white/5 hover:bg-red-500/25 text-slate-300 hover:text-red-300 cursor-pointer"
+                          title="Eliminar carpeta"
+                        >
+                          <Icon name="Trash2" size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // File Card / Row
+                const oscs = node.content?.oscillators || [];
+                const catInfo = CATEGORIES.find(c => c.id === node.content?.category);
+                const tech =
+                  node.content?.technicalRecommendation ||
+                  autoSuggestTechnicalRecommendation(oscs, node.content?.category, node.name);
+                const mediumBadges = tech.recommendedMediums
+                  .map(id => RADIATION_MEDIUMS.find(m => m.id === id))
+                  .filter((m): m is (typeof RADIATION_MEDIUMS)[number] => Boolean(m));
+                const isSelected = selectedId === node.id;
+                const isInspected = !!expandedInspectorIds[node.id];
+
+                return (
+                  <div
+                    key={node.id}
+                    onClick={() => setSelectedId(node.id)}
+                    onDoubleClick={() => {
+                      if (node.content && mode === 'load') {
+                        onFileSelect(node.content, false);
+                        onClose();
+                      }
+                    }}
+                    className={`rounded-2xl border p-4 transition-all flex flex-col gap-3 cursor-pointer ${
+                      isSelected
+                        ? 'bg-cyan-950/35 border-cyan-400/60 shadow-[0_0_24px_rgba(34,211,238,0.18)]'
+                        : 'bg-black/45 border-white/10 hover:border-white/25 hover:bg-black/60'
+                    }`}
+                  >
+                    {/* Card Header */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                        <div className="p-2 rounded-xl bg-purple-950/40 text-purple-300 border border-purple-500/25 shrink-0">
+                          <Icon name="FileAudio" size={16} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          {renamingNodeId === node.id ? (
+                            <input
+                              autoFocus
+                              type="text"
+                              value={renamingName}
+                              onChange={e => setRenamingName(e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') {
+                                  if (renamingName.trim()) fs.renameNode(node.id, renamingName.trim());
+                                  setRenamingNodeId(null);
+                                } else if (e.key === 'Escape') {
+                                  setRenamingNodeId(null);
+                                }
+                              }}
+                              onBlur={() => {
+                                if (renamingName.trim()) fs.renameNode(node.id, renamingName.trim());
+                                setRenamingNodeId(null);
+                              }}
+                              onClick={e => e.stopPropagation()}
+                              className="w-full bg-black/80 border border-cyan-500/50 text-white text-xs font-bold rounded-lg px-2 py-1 focus:outline-none"
+                            />
+                          ) : (
+                            <h4 className="font-bold text-white text-sm truncate">{node.name}</h4>
+                          )}
+                          <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                            <span
+                              className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/5 border border-white/10 ${
+                                catInfo?.color || 'text-cyan-300'
+                              }`}
+                            >
+                              <Icon name={catInfo?.iconName || 'Layers'} size={10} />
+                              {catInfo?.label || node.content?.category || 'Sinergia'}
+                            </span>
+                            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-white/5 text-slate-300 border border-white/10">
+                              {oscs.length} Osc
+                            </span>
+                            {pathLabel && (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-200 border border-amber-500/20">
+                                {pathLabel}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Description */}
+                    <p className="text-xs text-slate-300 line-clamp-2 font-light">
+                      {node.content?.description || 'Sin descripción'}
+                    </p>
+
+                    {/* Radiation Medium Badges */}
+                    <div className="flex flex-wrap gap-1">
+                      {mediumBadges.map(m => (
+                        <span
+                          key={m.id}
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-bold ${m.badgeClass}`}
+                        >
+                          <Icon name={m.iconName} size={9} />
+                          {m.shortLabel}
+                        </span>
+                      ))}
+                    </div>
+
+                    {/* Integrated Collapsible Inspector */}
+                    <div
+                      className="rounded-xl bg-black/50 border border-white/10 overflow-hidden"
+                      onClick={e => e.stopPropagation()}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => toggleInspector(node.id)}
+                        className="w-full px-3 py-2 flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-300 hover:text-cyan-300 cursor-pointer"
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <Icon name="Sliders" size={12} className="text-cyan-400" />
+                          Frecuencias y Recomendación ({oscs.length})
+                        </span>
+                        <Icon name={isInspected ? 'ChevronUp' : 'ChevronDown'} size={13} />
+                      </button>
+
+                      {isInspected && (
+                        <div className="px-3 pb-3 pt-1 space-y-2 border-t border-white/5 text-[11px]">
+                          <div className="bg-cyan-950/30 border border-cyan-500/20 rounded-lg p-2">
+                            <span className="block text-[9px] uppercase font-bold text-cyan-300">
+                              {tech.primaryMediumLabel}
+                            </span>
+                            <p className="text-slate-300 text-[10px] mt-0.5">{tech.usageMode}</p>
+                            <div className="grid grid-cols-2 gap-1 mt-1.5 text-[10px] font-mono text-slate-300">
+                              <span>Vol: {tech.recommendedVolume}</span>
+                              <span>{tech.recommendedVoltage || '1.2–12V'}</span>
+                              <span>{tech.frequencyScales.khz || '—'}</span>
+                              <span>{tech.frequencyScales.opticalNm || '—'}</span>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1 max-h-40 overflow-y-auto custom-scrollbar">
+                            {oscs.map((osc, i) => (
+                              <div
+                                key={osc.id || i}
+                                className="flex flex-wrap items-center justify-between gap-1 bg-white/[0.03] rounded-lg px-2 py-1.5 font-mono text-[10px] text-slate-200 border border-white/5"
+                              >
+                                <span className="font-bold text-cyan-300">
+                                  {osc.frequency} Hz
+                                </span>
+                                <span className="text-purple-300">{osc.type}</span>
+                                <span className="text-emerald-300">
+                                  {Math.round((osc.volume ?? 0.5) * 100)}%
+                                </span>
+                                <span className="text-slate-400">
+                                  Pan({Number(osc.panX ?? 0).toFixed(1)}, {Number(osc.panY ?? 0).toFixed(1)}, {Number(osc.panZ ?? 0).toFixed(1)})
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Action Toolbar */}
+                    <div
+                      className="flex flex-wrap items-center justify-between gap-1.5 pt-2 border-t border-white/10 mt-auto"
+                      onClick={e => e.stopPropagation()}
+                    >
+                      <div className="flex flex-wrap items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => openParticleEditor(node)}
+                          className="px-2 py-1.5 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/30 text-cyan-200 border border-cyan-500/30 text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+                          title="Editar partícula completa (frecuencias, categoría y recomendación)"
+                        >
+                          <Icon name="Edit3" size={12} />
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newId = fs.duplicateNode(node.id);
+                            if (newId) notify('success', `Partícula "${node.name}" duplicada.`);
+                          }}
+                          className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-slate-300 hover:text-white cursor-pointer"
+                          title="Duplicar"
+                        >
+                          <Icon name="Copy" size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMovingNode(node);
+                            setMoveTargetFolderId(node.parentId || 'root');
+                          }}
+                          className="p-1.5 rounded-lg bg-white/5 hover:bg-purple-500/20 text-slate-300 hover:text-purple-200 cursor-pointer"
+                          title="Mover a carpeta"
+                        >
+                          <Icon name="Move" size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleExportOS(node)}
+                          className="p-1.5 rounded-lg bg-white/5 hover:bg-amber-500/25 text-slate-300 hover:text-amber-200 cursor-pointer"
+                          title="Exportar a Starseed OS"
+                        >
+                          <Icon name="Cloud" size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openPublishConfirm(node)}
+                          className="p-1.5 rounded-lg bg-white/5 hover:bg-cyan-500/25 text-slate-300 hover:text-cyan-200 cursor-pointer"
+                          title="Publicar en Comunidad (Vibras)"
+                        >
+                          <Icon name="Globe" size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRenamingNodeId(node.id);
+                            setRenamingName(node.name);
+                          }}
+                          className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-slate-300 hover:text-white cursor-pointer"
+                          title="Renombrar"
+                        >
+                          <Icon name="Edit2" size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (confirm(`¿Borrar la partícula "${node.name}"?`)) {
+                              fs.deleteNode(node.id);
+                              if (selectedId === node.id) setSelectedId(null);
+                            }
+                          }}
+                          className="p-1.5 rounded-lg bg-white/5 hover:bg-red-500/25 text-slate-300 hover:text-red-300 cursor-pointer"
+                          title="Eliminar"
+                        >
+                          <Icon name="Trash2" size={12} />
+                        </button>
+                      </div>
+
+                      {mode === 'load' && node.content && (
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onFileSelect(node.content!, true);
+                              onClose();
+                            }}
+                            className="px-2.5 py-1.5 rounded-lg bg-purple-500/20 hover:bg-purple-500/40 text-purple-200 border border-purple-500/30 text-[10px] font-bold cursor-pointer"
+                          >
+                            + Mezclar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onFileSelect(node.content!, false);
+                              onClose();
+                            }}
+                            className="px-2.5 py-1.5 rounded-lg bg-cyan-500/25 hover:bg-cyan-500 text-cyan-100 hover:text-black border border-cyan-500/40 text-[10px] font-bold cursor-pointer"
+                          >
+                            Cargar
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="p-4 sm:p-5 border-t border-white/10 bg-black/70 backdrop-blur-xl relative z-10 shrink-0 max-h-[48vh] overflow-y-auto custom-scrollbar">
+          {mode === 'save' ? (
+            <div className="flex flex-col gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                <div className="md:col-span-4 relative">
+                  <input
+                    type="text"
+                    placeholder="Nombre de la partícula..."
+                    value={saveFileName}
+                    onChange={e => setSaveFileName(e.target.value)}
+                    className="w-full bg-black/60 border border-cyan-500/40 rounded-xl pl-3.5 pr-14 py-2.5 text-sm text-white focus:border-cyan-400 focus:outline-none placeholder:text-slate-500"
+                  />
+                  <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-cyan-500/60 text-xs font-mono font-bold">
+                    .omni
+                  </span>
+                </div>
+
+                <div className="md:col-span-4">
+                  <select
+                    value={saveFileCategory}
+                    onChange={e => setSaveFileCategory(e.target.value)}
+                    className="w-full bg-black/60 border border-cyan-500/30 rounded-xl px-3 py-2.5 text-xs text-white focus:border-cyan-400 focus:outline-none"
+                  >
+                    {EDITABLE_CATEGORIES.map(cat => (
+                      <option key={cat.id} value={cat.id} className="bg-slate-900">
+                        {cat.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="md:col-span-4">
+                  <input
+                    type="text"
+                    placeholder="Breve descripción o propósito..."
+                    value={saveFileDescription}
+                    onChange={e => setSaveFileDescription(e.target.value)}
+                    className="w-full bg-black/60 border border-cyan-500/30 rounded-xl px-3.5 py-2.5 text-xs text-white focus:border-cyan-400 focus:outline-none placeholder:text-slate-500"
+                  />
+                </div>
+              </div>
+
+              {/* Optional Collapsible Technical Recommendations in Save Mode */}
+              <div className="rounded-2xl border border-white/10 bg-black/40 overflow-hidden">
+                <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setShowSaveTechPanel(v => !v)}
+                    className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-cyan-300 hover:text-cyan-200 cursor-pointer"
+                  >
+                    <Icon name="Cpu" size={14} />
+                    <span>Recomendaciones Técnicas y Medio de Emisión (Opcional)</span>
+                    <Icon name={showSaveTechPanel ? 'ChevronUp' : 'ChevronDown'} size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAutoDetectSaveTech}
+                    className="px-3 py-1 rounded-lg bg-purple-500/20 hover:bg-purple-500/35 border border-purple-400/40 text-purple-200 text-[11px] font-bold flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Icon name="Sparkles" size={12} />
+                    Auto-detectar Recomendación
+                  </button>
+                </div>
+
+                {showSaveTechPanel && (
+                  <div className="p-3.5 border-t border-white/10 space-y-3 text-xs">
+                    <div>
+                      <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                        Medios de Radiación Recomendados
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {RADIATION_MEDIUMS.map(m => {
+                          const active = saveTechRec.recommendedMediums.includes(m.id);
+                          return (
+                            <button
+                              key={m.id}
+                              type="button"
+                              onClick={() => toggleSaveMedium(m.id)}
+                              className={`px-2.5 py-1 rounded-full border text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all ${
+                                active
+                                  ? `${m.badgeClass} shadow-[0_0_10px_rgba(34,211,238,0.2)]`
+                                  : 'bg-white/5 border-white/10 text-slate-400 hover:text-white'
+                              }`}
+                            >
+                              <Icon name={m.iconName} size={11} />
+                              {m.shortLabel}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <input
+                        type="text"
+                        value={saveTechRec.primaryMediumLabel}
+                        onChange={e => setSaveTechRec(prev => ({ ...prev, primaryMediumLabel: e.target.value }))}
+                        placeholder="Medio principal (ej. Auriculares Estéreo)"
+                        className="bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:border-cyan-400 focus:outline-none"
+                      />
+                      <input
+                        type="text"
+                        value={saveTechRec.recommendedVolume}
+                        onChange={e => setSaveTechRec(prev => ({ ...prev, recommendedVolume: e.target.value }))}
+                        placeholder="Volumen recomendado"
+                        className="bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:border-cyan-400 focus:outline-none"
+                      />
+                      <input
+                        type="text"
+                        value={saveTechRec.recommendedVoltage || ''}
+                        onChange={e => setSaveTechRec(prev => ({ ...prev, recommendedVoltage: e.target.value }))}
+                        placeholder="Voltaje (ej. 5 V - 12 V)"
+                        className="bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:border-cyan-400 focus:outline-none"
+                      />
+                      <input
+                        type="text"
+                        value={saveTechRec.recommendedAmperage || ''}
+                        onChange={e => setSaveTechRec(prev => ({ ...prev, recommendedAmperage: e.target.value }))}
+                        placeholder="Amperaje (ej. 250 mA)"
+                        className="bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:border-cyan-400 focus:outline-none"
+                      />
+                      <input
+                        type="text"
+                        value={saveTechRec.recommendedWatts || ''}
+                        onChange={e => setSaveTechRec(prev => ({ ...prev, recommendedWatts: e.target.value }))}
+                        placeholder="Watts (ej. 2 W - 12 W)"
+                        className="bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:border-cyan-400 focus:outline-none"
+                      />
+                      <input
+                        type="text"
+                        value={saveTechRec.recommendedDuration || ''}
+                        onChange={e => setSaveTechRec(prev => ({ ...prev, recommendedDuration: e.target.value }))}
+                        placeholder="Duración (ej. 20 - 45 min)"
+                        className="bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:border-cyan-400 focus:outline-none"
+                      />
+                    </div>
+                    <textarea
+                      value={saveTechRec.usageMode}
+                      onChange={e => setSaveTechRec(prev => ({ ...prev, usageMode: e.target.value }))}
+                      placeholder="Modo de uso / protocolo técnico..."
+                      rows={2}
+                      className="w-full bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:border-cyan-400 focus:outline-none resize-none"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                <span className="text-[11px] text-slate-400">
+                  Carpeta destino: <strong className="text-cyan-300">{currentFolder.name}</strong> ·{' '}
+                  {currentConfig?.oscillators?.length || 0} osciladores activos
+                </span>
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={!saveFileName.trim()}
+                  className="w-full sm:w-auto px-8 py-2.5 rounded-xl font-bold uppercase tracking-widest text-xs transition-all border bg-cyan-500/20 hover:bg-cyan-500 text-cyan-200 hover:text-black border-cyan-400/50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  Guardar Partícula
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="text-xs text-slate-400 truncate max-w-full">
+                {selectedNode?.type === 'file' ? (
+                  <>
+                    Seleccionado: <strong className="text-cyan-300">{selectedNode.name}</strong> (
+                    {selectedNode.content?.oscillators?.length || 0} osciladores)
+                  </>
+                ) : (
+                  'Selecciona una partícula para cargar, mezclar o editar'
+                )}
+              </div>
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (selectedNode?.type === 'file' && selectedNode.content) {
+                      onFileSelect(selectedNode.content, true);
+                      onClose();
+                    }
+                  }}
+                  disabled={!selectedNode || selectedNode.type !== 'file'}
+                  className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl font-bold uppercase tracking-widest text-xs border bg-purple-950/40 text-purple-200 border-purple-500/50 hover:bg-purple-900/60 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  + Mezclar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (selectedNode?.type === 'file' && selectedNode.content) {
+                      onFileSelect(selectedNode.content, false);
+                      onClose();
+                    }
+                  }}
+                  disabled={!selectedNode || selectedNode.type !== 'file'}
+                  className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl font-bold uppercase tracking-widest text-xs border bg-cyan-950/50 text-cyan-200 border-cyan-500/50 hover:bg-cyan-500 hover:text-black disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  Cargar
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* INTERNAL MODAL: FULL PARTICLE EDITOR */}
+        {editingParticle && (
+          <div
+            className="absolute inset-0 z-50 bg-black/85 backdrop-blur-xl flex items-center justify-center p-3 sm:p-6"
+            onClick={() => setEditingParticle(null)}
+          >
+            <div
+              className="w-full max-w-3xl bg-[#0a0f1f] border border-cyan-500/40 rounded-3xl shadow-[0_0_50px_rgba(34,211,238,0.25)] flex flex-col max-h-[88vh] overflow-hidden"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-5 py-4 border-b border-white/10 bg-black/40 shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <Icon name="Edit3" size={18} className="text-cyan-400" />
+                  <h3 className="text-base font-bold text-white">Editar Partícula Personal</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditingParticle(null)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10"
+                >
+                  <Icon name="X" size={18} />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-5 space-y-5 custom-scrollbar">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                      Nombre
+                    </label>
+                    <input
+                      type="text"
+                      value={editName}
+                      onChange={e => setEditName(e.target.value)}
+                      className="w-full bg-black/60 border border-white/15 rounded-xl px-3 py-2 text-sm text-white focus:border-cyan-400 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                      Categoría
+                    </label>
+                    <select
+                      value={editCategory}
+                      onChange={e => setEditCategory(e.target.value)}
+                      className="w-full bg-black/60 border border-white/15 rounded-xl px-3 py-2 text-sm text-white focus:border-cyan-400 focus:outline-none"
+                    >
+                      {EDITABLE_CATEGORIES.map(c => (
+                        <option key={c.id} value={c.id} className="bg-slate-900">
+                          {c.label}
+                        </option>
+                      ))}
+                      <option value="__custom__" className="bg-slate-900">
+                        Categoría Personalizada...
+                      </option>
+                    </select>
+                  </div>
+                </div>
+
+                {editCategory === '__custom__' && (
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                      Nombre de Categoría Personalizada
+                    </label>
+                    <input
+                      type="text"
+                      value={editCustomCategory}
+                      onChange={e => setEditCustomCategory(e.target.value)}
+                      placeholder="Ej. Meditación Solar"
+                      className="w-full bg-black/60 border border-cyan-500/30 rounded-xl px-3 py-2 text-sm text-white focus:border-cyan-400 focus:outline-none"
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                    Descripción
+                  </label>
+                  <textarea
+                    value={editDescription}
+                    onChange={e => setEditDescription(e.target.value)}
+                    rows={2}
+                    className="w-full bg-black/60 border border-white/15 rounded-xl px-3 py-2 text-xs text-white focus:border-cyan-400 focus:outline-none resize-none"
+                  />
+                </div>
+
+                {/* Oscillators Editor */}
+                <div className="rounded-2xl border border-white/10 bg-black/40 p-4 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-amber-300 flex items-center gap-1.5">
+                      <Icon name="Sliders" size={14} />
+                      Osciladores ({editOscillators.length})
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {currentConfig && currentConfig.oscillators && currentConfig.oscillators.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setEditOscillators(
+                              currentConfig.oscillators.map(o => ({ ...o, id: o.id || crypto.randomUUID() }))
+                            )
+                          }
+                          className="px-3 py-1 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/35 text-cyan-200 border border-cyan-500/30 text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+                        >
+                          <Icon name="Zap" size={12} />
+                          Reemplazar con activos actuales ({currentConfig.oscillators.length})
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEditOscillators(prev => [
+                            ...prev,
+                            {
+                              id: crypto.randomUUID(),
+                              frequency: 432,
+                              type: 'sine',
+                              volume: 0.5,
+                              panX: 0,
+                              panY: 0,
+                              panZ: 0,
+                              isPlaying: true,
+                              isIndependent: false,
+                              color: '#38bdf8',
+                              name: `Capa ${prev.length + 1}`
+                            }
+                          ])
+                        }
+                        className="px-3 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/35 text-amber-200 border border-amber-500/30 text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+                      >
+                        <Icon name="Plus" size={12} />
+                        Agregar Capa
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 max-h-56 overflow-y-auto custom-scrollbar pr-1">
+                    {editOscillators.map((osc, idx) => (
+                      <div
+                        key={osc.id || idx}
+                        className="grid grid-cols-2 sm:grid-cols-12 gap-2 items-center bg-white/[0.03] border border-white/10 rounded-xl p-2.5 text-xs"
+                      >
+                        <input
+                          type="text"
+                          value={osc.name || ''}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setEditOscillators(prev =>
+                              prev.map((item, i) => (i === idx ? { ...item, name: val } : item))
+                            );
+                          }}
+                          placeholder={`Capa ${idx + 1}`}
+                          className="col-span-2 sm:col-span-3 bg-black/60 border border-white/10 rounded-lg px-2 py-1.5 text-white text-xs"
+                        />
+                        <div className="col-span-1 sm:col-span-3 flex items-center gap-1">
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0.01"
+                            value={osc.frequency}
+                            onChange={e => {
+                              const val = parseFloat(e.target.value) || 0.1;
+                              setEditOscillators(prev =>
+                                prev.map((item, i) => (i === idx ? { ...item, frequency: val } : item))
+                              );
+                            }}
+                            className="w-full bg-black/60 border border-white/10 rounded-lg px-2 py-1.5 text-cyan-300 font-mono text-xs"
+                          />
+                          <span className="text-[10px] text-slate-400">Hz</span>
+                        </div>
+                        <select
+                          value={osc.type}
+                          onChange={e => {
+                            const val = e.target.value as WaveType;
+                            setEditOscillators(prev =>
+                              prev.map((item, i) => (i === idx ? { ...item, type: val } : item))
+                            );
+                          }}
+                          className="col-span-1 sm:col-span-2 bg-black/60 border border-white/10 rounded-lg px-1.5 py-1.5 text-purple-200 text-xs"
+                        >
+                          {WAVE_OPTIONS.map(w => (
+                            <option key={w.value} value={w.value} className="bg-slate-900">
+                              {w.label}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="col-span-1 sm:col-span-2 flex items-center gap-1">
+                          <span className="text-[10px] text-slate-400">Vol</span>
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={Math.round((osc.volume ?? 0.5) * 100)}
+                            onChange={e => {
+                              const pct = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+                              setEditOscillators(prev =>
+                                prev.map((item, i) => (i === idx ? { ...item, volume: pct / 100 } : item))
+                              );
+                            }}
+                            className="w-full bg-black/60 border border-white/10 rounded-lg px-2 py-1.5 text-emerald-300 font-mono text-xs"
+                          />
+                        </div>
+                        <div className="col-span-1 sm:col-span-2 flex items-center justify-between gap-1">
+                          <input
+                            type="number"
+                            step="0.1"
+                            min="-1"
+                            max="1"
+                            value={osc.panX ?? 0}
+                            onChange={e => {
+                              const pan = Math.max(-1, Math.min(1, parseFloat(e.target.value) || 0));
+                              setEditOscillators(prev =>
+                                prev.map((item, i) => (i === idx ? { ...item, panX: pan } : item))
+                              );
+                            }}
+                            title="Pan X (-1 a 1)"
+                            className="w-full bg-black/60 border border-white/10 rounded-lg px-2 py-1.5 text-slate-200 font-mono text-xs"
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setEditOscillators(prev => prev.filter((_, i) => i !== idx))
+                            }
+                            disabled={editOscillators.length <= 1}
+                            className="p-1.5 rounded-lg bg-red-500/15 hover:bg-red-500/35 text-red-300 disabled:opacity-30 cursor-pointer"
+                            title="Quitar capa"
+                          >
+                            <Icon name="Trash2" size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Technical Recommendations Editor */}
+                <div className="rounded-2xl border border-white/10 bg-black/40 p-4 space-y-3 text-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-cyan-300 flex items-center gap-1.5">
+                      <Icon name="Cpu" size={14} />
+                      Recomendaciones Técnicas
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const finalCat =
+                          editCategory === '__custom__' ? editCustomCategory : editCategory;
+                        setEditTechRec(
+                          autoSuggestTechnicalRecommendation(editOscillators, finalCat, editName)
+                        );
+                      }}
+                      className="px-3 py-1 rounded-lg bg-purple-500/20 hover:bg-purple-500/35 border border-purple-400/40 text-purple-200 text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+                    >
+                      <Icon name="Sparkles" size={12} />
+                      Auto-calcular por frecuencias
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5">
+                    {RADIATION_MEDIUMS.map(m => {
+                      const active = editTechRec.recommendedMediums.includes(m.id);
+                      return (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => toggleEditMedium(m.id)}
+                          className={`px-2.5 py-1 rounded-full border text-[10px] font-bold flex items-center gap-1 cursor-pointer ${
+                            active
+                              ? m.badgeClass
+                              : 'bg-white/5 border-white/10 text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <Icon name={m.iconName} size={11} />
+                          {m.shortLabel}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-[9px] uppercase text-slate-400 mb-1">Medio Principal</label>
+                      <input
+                        type="text"
+                        value={editTechRec.primaryMediumLabel}
+                        onChange={e =>
+                          setEditTechRec(prev => ({ ...prev, primaryMediumLabel: e.target.value }))
+                        }
+                        className="w-full bg-black/60 border border-white/10 rounded-lg px-2.5 py-1.5 text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] uppercase text-slate-400 mb-1">Volumen Recomendado</label>
+                      <input
+                        type="text"
+                        value={editTechRec.recommendedVolume}
+                        onChange={e =>
+                          setEditTechRec(prev => ({ ...prev, recommendedVolume: e.target.value }))
+                        }
+                        className="w-full bg-black/60 border border-white/10 rounded-lg px-2.5 py-1.5 text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] uppercase text-slate-400 mb-1">Voltaje</label>
+                      <input
+                        type="text"
+                        value={editTechRec.recommendedVoltage || ''}
+                        onChange={e =>
+                          setEditTechRec(prev => ({ ...prev, recommendedVoltage: e.target.value }))
+                        }
+                        className="w-full bg-black/60 border border-white/10 rounded-lg px-2.5 py-1.5 text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] uppercase text-slate-400 mb-1">Amperaje</label>
+                      <input
+                        type="text"
+                        value={editTechRec.recommendedAmperage || ''}
+                        onChange={e =>
+                          setEditTechRec(prev => ({ ...prev, recommendedAmperage: e.target.value }))
+                        }
+                        className="w-full bg-black/60 border border-white/10 rounded-lg px-2.5 py-1.5 text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] uppercase text-slate-400 mb-1">Watts</label>
+                      <input
+                        type="text"
+                        value={editTechRec.recommendedWatts || ''}
+                        onChange={e =>
+                          setEditTechRec(prev => ({ ...prev, recommendedWatts: e.target.value }))
+                        }
+                        className="w-full bg-black/60 border border-white/10 rounded-lg px-2.5 py-1.5 text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] uppercase text-slate-400 mb-1">Duración</label>
+                      <input
+                        type="text"
+                        value={editTechRec.recommendedDuration || ''}
+                        onChange={e =>
+                          setEditTechRec(prev => ({ ...prev, recommendedDuration: e.target.value }))
+                        }
+                        className="w-full bg-black/60 border border-white/10 rounded-lg px-2.5 py-1.5 text-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[9px] uppercase text-slate-400 mb-1">Modo de Uso</label>
+                    <textarea
+                      value={editTechRec.usageMode}
+                      onChange={e => setEditTechRec(prev => ({ ...prev, usageMode: e.target.value }))}
+                      rows={2}
+                      className="w-full bg-black/60 border border-white/10 rounded-lg px-2.5 py-1.5 text-white resize-none"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div>
+                      <label className="block text-[9px] uppercase text-slate-400 mb-1">Escala Hz</label>
+                      <input
+                        type="text"
+                        value={editTechRec.frequencyScales.hz}
+                        onChange={e =>
+                          setEditTechRec(prev => ({
+                            ...prev,
+                            frequencyScales: { ...prev.frequencyScales, hz: e.target.value }
+                          }))
+                        }
+                        className="w-full bg-black/60 border border-white/10 rounded-lg px-2 py-1 text-cyan-200 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] uppercase text-slate-400 mb-1">Escala kHz</label>
+                      <input
+                        type="text"
+                        value={editTechRec.frequencyScales.khz || ''}
+                        onChange={e =>
+                          setEditTechRec(prev => ({
+                            ...prev,
+                            frequencyScales: { ...prev.frequencyScales, khz: e.target.value }
+                          }))
+                        }
+                        className="w-full bg-black/60 border border-white/10 rounded-lg px-2 py-1 text-purple-200 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] uppercase text-slate-400 mb-1">Escala MHz</label>
+                      <input
+                        type="text"
+                        value={editTechRec.frequencyScales.mhz || ''}
+                        onChange={e =>
+                          setEditTechRec(prev => ({
+                            ...prev,
+                            frequencyScales: { ...prev.frequencyScales, mhz: e.target.value }
+                          }))
+                        }
+                        className="w-full bg-black/60 border border-white/10 rounded-lg px-2 py-1 text-amber-200 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] uppercase text-slate-400 mb-1">Óptica (nm)</label>
+                      <input
+                        type="text"
+                        value={editTechRec.frequencyScales.opticalNm || ''}
+                        onChange={e =>
+                          setEditTechRec(prev => ({
+                            ...prev,
+                            frequencyScales: { ...prev.frequencyScales, opticalNm: e.target.value }
+                          }))
+                        }
+                        className="w-full bg-black/60 border border-white/10 rounded-lg px-2 py-1 text-rose-200 font-mono"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="px-5 py-4 border-t border-white/10 bg-black/50 flex justify-end gap-3 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setEditingParticle(null)}
+                  className="px-4 py-2 rounded-xl border border-white/15 text-xs font-bold text-slate-300 hover:bg-white/5 cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveParticleEdits}
+                  disabled={!editName.trim()}
+                  className="px-6 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black font-bold text-xs uppercase tracking-wider disabled:opacity-40 cursor-pointer"
+                >
+                  Guardar Cambios
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* INTERNAL MODAL: MOVE NODE */}
+        {movingNode && (
+          <div
+            className="absolute inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4"
+            onClick={() => setMovingNode(null)}
+          >
+            <div
+              className="w-full max-w-md bg-[#0a0f1f] border border-purple-500/40 rounded-2xl p-5 space-y-4 shadow-2xl"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Icon name="Move" size={16} className="text-purple-400" />
+                  Mover "{movingNode.name}"
+                </h3>
+                <button onClick={() => setMovingNode(null)} className="text-slate-400 hover:text-white">
+                  <Icon name="X" size={16} />
+                </button>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1.5">
+                  Carpeta de destino
+                </label>
+                <select
+                  value={moveTargetFolderId}
+                  onChange={e => setMoveTargetFolderId(e.target.value)}
+                  className="w-full bg-black/60 border border-white/15 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-purple-400"
+                >
+                  {allFolders
+                    .filter(f => f.id !== movingNode.id)
+                    .map(f => (
+                      <option key={f.id} value={f.id} className="bg-slate-900">
+                        {f.label}
+                      </option>
+                    ))}
+                </select>
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMovingNode(null)}
+                  className="px-4 py-2 rounded-xl border border-white/10 text-xs font-bold text-slate-300 hover:bg-white/5"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const ok = fs.moveNode(movingNode.id, moveTargetFolderId);
+                    if (ok) {
+                      notify('success', `"${movingNode.name}" movido correctamente.`);
+                    } else {
+                      notify('error', 'No se puede mover a esa carpeta.');
+                    }
+                    setMovingNode(null);
+                  }}
+                  className="px-5 py-2 rounded-xl bg-purple-500 hover:bg-purple-400 text-white text-xs font-bold"
+                >
+                  Mover
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* INTERNAL MODAL: PUBLISH TO COMMUNITY VIBRAS */}
+        {publishingNode && (
+          <div
+            className="absolute inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4"
+            onClick={() => setPublishingNode(null)}
+          >
+            <div
+              className="w-full max-w-md bg-[#0a0f1f] border border-cyan-500/40 rounded-2xl p-5 space-y-4 shadow-2xl"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Icon name="Globe" size={16} className="text-cyan-400" />
+                  Publicar en Comunidad (Vibras)
+                </h3>
+                <button onClick={() => setPublishingNode(null)} className="text-slate-400 hover:text-white">
+                  <Icon name="X" size={16} />
+                </button>
+              </div>
+              <p className="text-xs text-slate-300">
+                Se publicará <strong className="text-cyan-200">{publishingNode.name}</strong> con{' '}
+                {publishingNode.content?.oscillators?.length || 0} osciladores y su recomendación técnica.
+              </p>
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Categoría Pública</label>
+                <select
+                  value={publishCategory}
+                  onChange={e => setPublishCategory(e.target.value)}
+                  className="w-full bg-black/60 border border-white/15 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400"
+                >
+                  {EDITABLE_CATEGORIES.map(c => (
+                    <option key={c.id} value={c.id} className="bg-slate-900">
+                      {c.label}
+                    </option>
+                  ))}
+                  <option value="__custom__" className="bg-slate-900">
+                    Otra categoría...
+                  </option>
+                </select>
+                {publishCategory === '__custom__' && (
+                  <input
+                    type="text"
+                    value={publishCustomCategory}
+                    onChange={e => setPublishCustomCategory(e.target.value)}
+                    placeholder="Nombre de categoría..."
+                    className="mt-2 w-full bg-black/60 border border-cyan-500/30 rounded-xl px-3 py-2 text-xs text-white"
+                  />
+                )}
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPublishingNode(null)}
+                  className="px-4 py-2 rounded-xl border border-white/10 text-xs font-bold text-slate-300 hover:bg-white/5"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={isPublishing}
+                  onClick={handleConfirmPublish}
+                  className="px-5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black text-xs font-bold flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {isPublishing && <Icon name="Loader" size={12} className="animate-spin" />}
+                  Publicar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>,
     document.body

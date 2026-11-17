@@ -13,6 +13,23 @@ export const useScreenWakeLock = (enabled: boolean = true) => {
   const fallbackVideoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
+    const releaseWakeLock = () => {
+      if (wakeLockSentinelRef.current) {
+        try {
+          wakeLockSentinelRef.current.release();
+        } catch (_) {}
+        wakeLockSentinelRef.current = null;
+      }
+      if (fallbackVideoRef.current) {
+        try {
+          fallbackVideoRef.current.pause();
+          fallbackVideoRef.current.remove();
+        } catch (_) {}
+        fallbackVideoRef.current = null;
+      }
+      setIsLocked(false);
+    };
+
     if (!enabled) {
       releaseWakeLock();
       return;
@@ -94,23 +111,6 @@ export const useScreenWakeLock = (enabled: boolean = true) => {
       } catch (e) {
         console.warn('[ScreenWakeLock] Error inicializando fallback:', e);
       }
-    };
-
-    const releaseWakeLock = () => {
-      if (wakeLockSentinelRef.current) {
-        try {
-          wakeLockSentinelRef.current.release();
-        } catch (_) {}
-        wakeLockSentinelRef.current = null;
-      }
-      if (fallbackVideoRef.current) {
-        try {
-          fallbackVideoRef.current.pause();
-          fallbackVideoRef.current.remove();
-        } catch (_) {}
-        fallbackVideoRef.current = null;
-      }
-      setIsLocked(false);
     };
 
     // Re-acquire wake lock when app comes back to foreground

@@ -104,7 +104,7 @@ const MeshSignalMap: React.FC<MeshSignalMapProps> = ({ onSelectNode }) => {
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-cyan-950/30 via-black to-black pointer-events-none" />
           
           {/* Radar Container */}
-          <div className="relative w-72 h-72 sm:w-80 sm:h-80 rounded-full border border-cyan-500/30 flex items-center justify-center shadow-[0_0_50px_rgba(34,211,238,0.15)]">
+          <div className="relative w-64 h-64 sm:w-80 sm:h-80 rounded-full border border-cyan-500/30 flex items-center justify-center shadow-[0_0_50px_rgba(34,211,238,0.15)] mx-auto">
             {/* Concentric Circles */}
             <div className="absolute inset-4 rounded-full border border-cyan-500/20 border-dashed" />
             <div className="absolute inset-16 rounded-full border border-cyan-500/20" />
@@ -129,8 +129,8 @@ const MeshSignalMap: React.FC<MeshSignalMapProps> = ({ onSelectNode }) => {
 
             {/* Plotted Signal Nodes */}
             {allNodes.map((node) => {
-              const x = node.lng * 120;
-              const y = node.lat * 120;
+              const x = node.lng * 96;
+              const y = node.lat * 96;
               return (
                 <div
                   key={node.id}

@@ -61,7 +61,7 @@ export const AIGeneratorModal: React.FC<Props> = ({ onClose, onApplyPreset }) =>
       <div className="absolute inset-0 bg-black/60" onClick={onClose}></div>
 
       {/* Main Centered Card Container */}
-      <div className="relative z-10 w-full max-w-2xl max-h-[90vh] my-auto overflow-y-auto custom-scrollbar bg-black/95 border border-cyan-500/50 rounded-3xl p-6 sm:p-8 shadow-[0_0_90px_rgba(34,211,238,0.3),inset_0_0_30px_rgba(34,211,238,0.05)]">
+      <div className="relative z-10 w-full max-w-2xl max-h-[90dvh] my-auto overflow-y-auto custom-scrollbar bg-black/95 border border-cyan-500/50 rounded-3xl p-5 sm:p-8 shadow-[0_0_90px_rgba(34,211,238,0.3),inset_0_0_30px_rgba(34,211,238,0.05)]">
         
         {/* Background glow elements */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-96 bg-cyan-500/10 rounded-full blur-[100px] pointer-events-none"></div>

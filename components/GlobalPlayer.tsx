@@ -76,7 +76,7 @@ const GlobalPlayer: React.FC<Props> = ({ audio }) => {
                  <>
                    {/* Backdrop dismiss */}
                    <div 
-                     className="fixed inset-0 z-[90] bg-black/50 backdrop-blur-xs"
+                     className="fixed inset-0 z-[90] bg-black/55 backdrop-blur-sm"
                      onClick={() => setShowFilter(false)}
                    />
 

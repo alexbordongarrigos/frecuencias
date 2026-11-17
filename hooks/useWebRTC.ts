@@ -121,7 +121,7 @@ export const useWebRTC = (
 
     return () => {
       channel.unsubscribe();
-      Object.values(peerConnections.current).forEach(pc => pc.close());
+      (Object.values(peerConnections.current) as RTCPeerConnection[]).forEach(pc => pc.close());
       peerConnections.current = {};
       if (localStream) {
         localStream.getTracks().forEach(track => track.stop());
@@ -194,7 +194,7 @@ export const useWebRTC = (
       setIsAudioEnabled(audio);
 
       // Add tracks to all existing connections
-      Object.values(peerConnections.current).forEach(pc => {
+      (Object.values(peerConnections.current) as RTCPeerConnection[]).forEach(pc => {
         stream.getTracks().forEach(track => {
           pc.addTrack(track, stream);
         });

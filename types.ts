@@ -1,5 +1,122 @@
+export type CategoryId =
+  | 'all'
+  | 'solfeggio'
+  | 'planetary'
+  | 'body'
+  | 'bioresonance'
+  | 'brain'
+  | 'nature'
+  | 'electromagnetic'
+  | 'numerology'
+  | 'pyramid'
+  | 'chakras'
+  | 'rhythms'
+  | 'microtonal'
+  | 'music'
+  | 'synergy';
 
-export type CategoryId = 'all' | 'pyramid' | 'body' | 'planetary' | 'solfeggio' | 'brain' | 'synergy' | 'bioresonance' | 'music' | 'chakras' | 'rhythms' | 'microtonal';
+export type RadiationMedium =
+  | 'acustica'
+  | 'electromagnetica'
+  | 'magnetica'
+  | 'fotonica_nir'
+  | 'fotonica_uv'
+  | 'ionica_plasma'
+  | 'multimedio';
+
+export const RADIATION_MEDIUMS: {
+  id: RadiationMedium;
+  label: string;
+  shortLabel: string;
+  iconName: string;
+  color: string;
+  badgeClass: string;
+  summary: string;
+}[] = [
+  {
+    id: 'acustica',
+    label: 'Acústica / Vibroacústica',
+    shortLabel: 'Acústica',
+    iconName: 'Volume2',
+    color: 'text-cyan-300',
+    badgeClass: 'bg-cyan-500/15 border-cyan-400/40 text-cyan-200',
+    summary: 'Altavoces, audífonos estéreo/binaurales o transductores vibroacústicos.'
+  },
+  {
+    id: 'electromagnetica',
+    label: 'Electromagnética (PEMF)',
+    shortLabel: 'PEMF / EM',
+    iconName: 'Radio',
+    color: 'text-purple-300',
+    badgeClass: 'bg-purple-500/15 border-purple-400/40 text-purple-200',
+    summary: 'Campos electromagnéticos pulsados mediante bobinas de induccion o antenas.'
+  },
+  {
+    id: 'magnetica',
+    label: 'Magnética / Escalar',
+    shortLabel: 'Magnética',
+    iconName: 'Magnet',
+    color: 'text-indigo-300',
+    badgeClass: 'bg-indigo-500/15 border-indigo-400/40 text-indigo-200',
+    summary: 'Bobinas toroidales, bifilares de Tesla o campos magnéticos de baja intensidad.'
+  },
+  {
+    id: 'fotonica_nir',
+    label: 'Fotónica Infrarroja (NIR)',
+    shortLabel: 'Fotónica IR',
+    iconName: 'Sun',
+    color: 'text-rose-300',
+    badgeClass: 'bg-rose-500/15 border-rose-400/40 text-rose-200',
+    summary: 'Luz roja e infrarroja cercana (630–980 nm) modulada por pulsos armónicos.'
+  },
+  {
+    id: 'fotonica_uv',
+    label: 'Fotónica UV / Espectro Visible',
+    shortLabel: 'Fotónica UV/Luz',
+    iconName: 'Sparkles',
+    color: 'text-violet-300',
+    badgeClass: 'bg-violet-500/15 border-violet-400/40 text-violet-200',
+    summary: 'Biofotónica de espectro visible y UV-A suave modulada en octavas ópticas.'
+  },
+  {
+    id: 'ionica_plasma',
+    label: 'Iónica / Tubo de Plasma',
+    shortLabel: 'Iónica / Plasma',
+    iconName: 'Zap',
+    color: 'text-amber-300',
+    badgeClass: 'bg-amber-500/15 border-amber-400/40 text-amber-200',
+    summary: 'Tubos de plasma Rife/Phanotron, ionizadores o electrodos de microcorriente.'
+  },
+  {
+    id: 'multimedio',
+    label: 'Emisión Híbrida Multi-Medio',
+    shortLabel: 'Multi-Medio',
+    iconName: 'Atom',
+    color: 'text-emerald-300',
+    badgeClass: 'bg-emerald-500/15 border-emerald-400/40 text-emerald-200',
+    summary: 'Combinación sincronizada de audio, bobina PEMF y modulación fotónica.'
+  }
+];
+
+export interface TechnicalRecommendation {
+  recommendedMediums: RadiationMedium[];
+  primaryMediumLabel: string;
+  usageMode: string;
+  frequencyScales: {
+    hz: string;
+    khz?: string;
+    mhz?: string;
+    opticalNm?: string;
+  };
+  recommendedVolume: string;
+  recommendedVoltage?: string;
+  recommendedAmperage?: string;
+  recommendedWatts?: string;
+  recommendedDuration?: string;
+  numerologyRelation?: string;
+  harmonicEquation?: string;
+  naturalObjectResonance?: string;
+}
 
 export interface FrequencyItem {
   id: string;
@@ -14,6 +131,8 @@ export interface FrequencyItem {
   binauralBeatHz?: number;
   harmonics?: number[];
   cymaticPatternName?: string;
+  oscillatorsConfig?: Partial<OscillatorState>[];
+  technicalRecommendation?: TechnicalRecommendation;
 }
 
 export interface SortOption {
@@ -21,19 +140,28 @@ export interface SortOption {
   value: 'hz-asc' | 'hz-desc' | 'name-asc' | 'location';
 }
 
-export const CATEGORIES: { id: CategoryId; label: string; iconName: string; color: string }[] = [
-  { id: 'all', label: 'Todas', iconName: 'Layers', color: 'text-slate-200' },
-  { id: 'solfeggio', label: 'Solfeggio', iconName: 'Music', color: 'text-purple-400' },
-  { id: 'planetary', label: 'Cósmicas', iconName: 'Orbit', color: 'text-cyan-400' },
-  { id: 'body', label: 'Cuerpo & Orgánicas', iconName: 'Activity', color: 'text-red-400' },
-  { id: 'bioresonance', label: 'Rife & Patógenos', iconName: 'Shield', color: 'text-orange-400' },
-  { id: 'brain', label: 'Neuroacústica', iconName: 'Brain', color: 'text-pink-400' },
-  { id: 'pyramid', label: 'Megalitos', iconName: 'Pyramid', color: 'text-amber-500' },
-  { id: 'music', label: 'Música Sagrada', iconName: 'Radio', color: 'text-indigo-400' },
-  { id: 'chakras', label: 'Chakras & Vórtex', iconName: 'Sun', color: 'text-yellow-400' },
-  { id: 'rhythms', label: 'Ritmos e Isocrónicos', iconName: 'Volume2', color: 'text-emerald-400' },
-  { id: 'microtonal', label: 'Pitagóricas & Microtonales', iconName: 'Sliders', color: 'text-blue-400' },
-  { id: 'synergy', label: 'Sinergias Maestras', iconName: 'Zap', color: 'text-teal-400' },
+export const CATEGORIES: {
+  id: CategoryId;
+  label: string;
+  iconName: string;
+  color: string;
+  description?: string;
+}[] = [
+  { id: 'all', label: 'Todas', iconName: 'Layers', color: 'text-slate-200', description: 'Espectro completo de partículas resonantes' },
+  { id: 'solfeggio', label: 'Solfeggio & Armónicos', iconName: 'Music', color: 'text-purple-400', description: 'Escala sagrada teosófica 3-6-9 y armónicos' },
+  { id: 'planetary', label: 'Cósmicas & Planetarias', iconName: 'Orbit', color: 'text-cyan-400', description: 'Octava Cósmica orbital de Hans Cousto y Schumann' },
+  { id: 'nature', label: 'Naturaleza, Agua & Cristales', iconName: 'Waves', color: 'text-emerald-300', description: 'Agua EZ, minerales piezoeléctricos, plantas y fauna' },
+  { id: 'body', label: 'Cuerpo, Celular & Biofísica', iconName: 'Activity', color: 'text-red-400', description: 'Resonancias de órganos, ADN y reparación tisular' },
+  { id: 'bioresonance', label: 'Rife, Nogier & Bio-Resonancia', iconName: 'Shield', color: 'text-orange-400', description: 'Protocolos bioeléctricos de Rife, Clark y Paul Nogier' },
+  { id: 'electromagnetic', label: 'PEMF, Fotónica & Plasma', iconName: 'Atom', color: 'text-sky-400', description: 'Ciclotrón iónico, biofotónica UV/IR y ondas escalares' },
+  { id: 'brain', label: 'Neuroacústica & Cerebro', iconName: 'Brain', color: 'text-pink-400', description: 'Estados Epsilon, Delta, Theta, Alfa, Beta, Gamma y Lambda' },
+  { id: 'numerology', label: 'Numerología, Fibonacci & Phi', iconName: 'Hexagon', color: 'text-amber-300', description: 'Constantes matemáticas, sólidos platónicos y proporción áurea' },
+  { id: 'pyramid', label: 'Arqueoacústica & Megalitos', iconName: 'Pyramid', color: 'text-amber-500', description: 'Cámaras resonantes de Giza, Malta, Barabar y Stonehenge' },
+  { id: 'chakras', label: 'Chakras & Vórtex', iconName: 'Sun', color: 'text-yellow-400', description: 'Escala védica y sistema bioenergético de 7 vórtex' },
+  { id: 'rhythms', label: 'Ritmos & Isocrónicos', iconName: 'Volume2', color: 'text-emerald-400', description: 'Pulsos isocrónicos y arrastre rítmico sin auriculares' },
+  { id: 'microtonal', label: 'Pitagóricas & Microtonales', iconName: 'Sliders', color: 'text-blue-400', description: 'Afinaciones justas 432 Hz, 444 Hz y comas armónicas' },
+  { id: 'music', label: 'Música Sagrada', iconName: 'Headphones', color: 'text-indigo-400', description: 'Intervalos sagrados y armónicos consonantes' },
+  { id: 'synergy', label: 'Sinergias & Ecuaciones', iconName: 'Zap', color: 'text-teal-400', description: 'Combinaciones multi-oscilador y ecuaciones resonantes' },
 ];
 
 // --- Audio Engine Types ---
@@ -182,12 +310,16 @@ export interface PresetContent {
   cymaticsConfig?: Partial<CymaticsConfig>;
   spiralConfig?: Partial<SpiralConfig>;
   dateCreated: number;
+  updatedAt?: number;
   description?: string;
   authorId?: string; // Starseed OS account ID
+  authorName?: string;
   isPublic?: boolean; // Starseed OS cloud sharing
   version?: string;
   tags?: string[];
   category?: CategoryId | string;
+  downloads?: number;
+  technicalRecommendation?: TechnicalRecommendation;
 }
 
 export interface FileSystemNode {
@@ -235,6 +367,7 @@ export interface LiveSession {
   description?: string;
   cover_url?: string;
   avatar_url?: string;
+  category?: string;
   fixedPermissions?: boolean; // If true, permissions don't change if host leaves
 }
 
@@ -257,4 +390,3 @@ export interface OmniResonance {
   followingId: string;
   createdAt: number;
 }
-
