@@ -19,6 +19,7 @@ interface Props {
   delay: number;
   onAddToPlayer: (item: FrequencyItem, replace?: boolean) => void;
   oscillatorsList?: Partial<OscillatorState>[];
+  onSaveToLibrary?: (item: FrequencyItem) => void;
 }
 
 type SectionKey = 'properties' | 'technical' | 'oscillators';
@@ -30,7 +31,7 @@ const WAVE_LABELS: Record<WaveType, string> = {
   triangle: 'Triangular'
 };
 
-const FrequencyCard: React.FC<Props> = ({ item, delay, onAddToPlayer, oscillatorsList }) => {
+const FrequencyCard: React.FC<Props> = ({ item, delay, onAddToPlayer, oscillatorsList, onSaveToLibrary }) => {
   const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
     properties: false,
     technical: false,
@@ -399,6 +400,21 @@ const FrequencyCard: React.FC<Props> = ({ item, delay, onAddToPlayer, oscillator
             <Icon name="Zap" size={15} className="text-cyan-300" />
             <span>Cargar en Espectrómetro</span>
           </button>
+
+          {onSaveToLibrary && (
+            <button
+              type="button"
+              onClick={e => {
+                e.stopPropagation();
+                onSaveToLibrary(item);
+              }}
+              className="p-2.5 rounded-xl bg-black/50 border border-white/10 hover:border-purple-400/50 text-slate-300 hover:text-purple-200 transition-all shrink-0 cursor-pointer flex items-center justify-center"
+              title="Guardar partícula en Cerebro / Carpeta"
+              aria-label="Guardar partícula en Cerebro o Carpeta"
+            >
+              <Icon name="FolderPlus" size={15} />
+            </button>
+          )}
         </div>
 
         {/* 3 Clear Collapsible Sections */}

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
   FileSystemNode,
@@ -72,6 +72,16 @@ const collectTreeFiles = (
 const FileExplorer: React.FC<Props> = ({ mode, onFileSelect, onClose, fs, currentConfig }) => {
   const [currentFolderId, setCurrentFolderId] = useState<string>('root');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const explorerArchiveInputRef = useRef<HTMLInputElement>(null);
+  const [showCreateBrainBox, setShowCreateBrainBox] = useState(false);
+  const [newBrainName, setNewBrainName] = useState('');
+  const [newBrainDesc, setNewBrainDesc] = useState('');
+  const [creatingBrain, setCreatingBrain] = useState(false);
+
+  useEffect(() => {
+    setCurrentFolderId('root');
+    setSelectedId(null);
+  }, [fs.selectedBrainId, fs.user?.id]);
 
   // Folder creation & inline rename
   const [newFolderName, setNewFolderName] = useState('');
@@ -774,6 +784,275 @@ const FileExplorer: React.FC<Props> = ({ mode, onFileSelect, onClose, fs, curren
           </button>
         </div>
 
+        {/* StarSeed OS Brain & Storage Synchronization Bar */}
+        <div className="px-4 sm:px-6 py-2.5 border-b border-white/10 bg-[#080e1d]/90 relative z-10 shrink-0 space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {fs.user ? (
+              <div className="flex flex-wrap items-center gap-2 min-w-0">
+                <div className="flex items-center gap-1.5 bg-black/60 border border-purple-500/35 rounded-xl px-2.5 py-1.5">
+                  <Icon name="Brain" size={14} className="text-purple-300 shrink-0" />
+                  <select
+                    aria-label="Seleccionar Cerebro StarSeed OS"
+                    value={fs.selectedBrainId || ''}
+                    onChange={(e) => fs.selectBrain(e.target.value)}
+                    disabled={fs.isLoadingBrains || fs.brains.length === 0}
+                    className="bg-transparent text-xs font-bold text-white focus:outline-none max-w-[200px] sm:max-w-[260px] cursor-pointer"
+                  >
+                    {fs.brains.map((b) => (
+                      <option key={b.id} value={b.id} className="bg-[#0a0f1f] text-white">
+                        {b.name} ({b.accessLevel.toUpperCase()})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {fs.selectedBrain && (
+                  <span
+                    className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border ${
+                      fs.selectedBrain.accessLevel === 'admin'
+                        ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-200'
+                        : fs.selectedBrain.accessLevel === 'escritura'
+                        ? 'bg-cyan-500/15 border-cyan-400/40 text-cyan-200'
+                        : 'bg-amber-500/15 border-amber-400/40 text-amber-200'
+                    }`}
+                  >
+                    {fs.selectedBrain.isOwner ? 'Admin' : `Compartido · ${fs.selectedBrain.accessLevel}`}
+                  </span>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setShowCreateBrainBox(!showCreateBrainBox)}
+                  className="px-2.5 py-1 rounded-lg bg-purple-500/15 hover:bg-purple-500/30 border border-purple-400/35 text-[10px] font-bold uppercase text-purple-200 flex items-center gap-1 cursor-pointer"
+                  title="Crear un nuevo cerebro en tu cuenta StarSeed OS"
+                >
+                  <Icon name="Plus" size={11} /> Cerebro
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => fs.syncNow()}
+                  disabled={fs.syncState === 'syncing'}
+                  className={`px-2.5 py-1 rounded-lg border text-[10px] font-bold uppercase flex items-center gap-1.5 cursor-pointer transition-colors ${
+                    fs.syncState === 'synced'
+                      ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-200'
+                      : fs.syncState === 'offline_queued'
+                      ? 'bg-amber-500/15 border-amber-400/40 text-amber-200'
+                      : fs.syncState === 'read_only'
+                      ? 'bg-slate-800 border-white/15 text-slate-300'
+                      : 'bg-cyan-500/15 border-cyan-400/40 text-cyan-200'
+                  }`}
+                  title={fs.syncMessage || 'Sincronizar biblioteca ahora'}
+                >
+                  <Icon
+                    name={fs.syncState === 'syncing' ? 'Loader' : fs.isOnline ? 'CloudUpload' : 'WifiOff'}
+                    size={11}
+                    className={fs.syncState === 'syncing' ? 'animate-spin' : ''}
+                  />
+                  <span>
+                    {fs.syncState === 'synced'
+                      ? 'Sincronizado'
+                      : fs.syncState === 'syncing'
+                      ? 'Sincronizando...'
+                      : fs.syncState === 'offline_queued'
+                      ? 'En cola offline'
+                      : fs.syncState === 'read_only'
+                      ? 'Solo lectura'
+                      : 'Sincronizar'}
+                  </span>
+                </button>
+
+                {fs.selectedBrain && fs.selectedBrain.storageMethods.slice(0, 2).map((m) => (
+                  <span
+                    key={m.id}
+                    className="hidden xl:inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/[0.04] border border-white/10 text-[10px] text-slate-300"
+                    title={`Medio de almacenamiento vinculado (${m.kind})`}
+                  >
+                    <Icon name="Database" size={10} className="text-cyan-400" />
+                    {m.name}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center gap-2 min-w-0">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-black/60 border border-cyan-500/30 text-[11px] font-semibold text-cyan-200">
+                  <Icon name="HardDrive" size={13} className="text-cyan-400" />
+                  <span className="truncate max-w-[230px]">
+                    {fs.localLocationMeta
+                      ? `Local: ${fs.localLocationMeta.label}`
+                      : 'Local del Dispositivo (Sin cuenta StarSeed OS)'}
+                  </span>
+                </span>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const res = await fs.chooseLocalDeviceLocation('directory');
+                    if (res.ok && res.meta) {
+                      notify('success', `Carpeta local recordada: ${res.meta.label}`);
+                    } else if (res.error) {
+                      notify('error', res.error);
+                    }
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/30 border border-cyan-400/35 text-[10px] font-bold uppercase text-cyan-200 flex items-center gap-1 cursor-pointer"
+                >
+                  <Icon name="FolderOpen" size={11} /> Elegir Carpeta Local
+                </button>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const res = await fs.chooseLocalDeviceLocation('file');
+                    if (res.ok && res.meta) {
+                      notify('success', `Archivo local recordado: ${res.meta.label}`);
+                    } else if (res.error) {
+                      notify('error', res.error);
+                    }
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 border border-white/15 text-[10px] font-bold uppercase text-slate-200 flex items-center gap-1 cursor-pointer"
+                >
+                  <Icon name="Save" size={11} /> Archivo Destino
+                </button>
+              </div>
+            )}
+
+            {/* Universal Import / Export Full Library Archive */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <input
+                ref={explorerArchiveInputRef}
+                type="file"
+                accept=".json,.omni,.omni-library.json"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = (ev) => {
+                    const text = ev.target?.result;
+                    if (typeof text === 'string') {
+                      const ok = fs.importSystem(text, { mode: 'merge', targetFolderId: currentFolderId });
+                      if (ok) {
+                        notify('success', `Importado "${file.name}" preservando carpetas y configuración completa.`);
+                      } else {
+                        notify('error', 'Formato no compatible o cerebro de solo lectura.');
+                      }
+                    }
+                  };
+                  reader.readAsText(file);
+                  e.target.value = '';
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => explorerArchiveInputRef.current?.click()}
+                disabled={fs.user ? !fs.canWriteCurrentBrain : false}
+                className="px-2.5 py-1 rounded-lg bg-indigo-500/15 hover:bg-indigo-500/30 border border-indigo-400/35 text-[10px] font-bold uppercase text-indigo-200 flex items-center gap-1 cursor-pointer disabled:opacity-40"
+                title="Importar carpetas y partículas completas desde archivo .omni-library.json o .json"
+              >
+                <Icon name="Upload" size={11} /> Importar Archivo
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(fs.exportSystem());
+                  const link = document.createElement('a');
+                  const safeName = (fs.selectedBrain?.name || 'biblioteca-local')
+                    .toLowerCase()
+                    .replace(/[^a-z0-9-_]+/gi, '-');
+                  link.setAttribute('href', dataStr);
+                  link.setAttribute('download', `${safeName}.omni-library.json`);
+                  document.body.appendChild(link);
+                  link.click();
+                  link.remove();
+                  notify('success', 'Biblioteca completa exportada en formato .omni-library.json.');
+                }}
+                className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/30 border border-emerald-400/35 text-[10px] font-bold uppercase text-emerald-200 flex items-center gap-1 cursor-pointer"
+                title="Exportar todas las carpetas y configuraciones completas de partículas"
+              >
+                <Icon name="Download" size={11} /> Exportar Todo
+              </button>
+            </div>
+          </div>
+
+          {/* Inline Create New Brain Box */}
+          {fs.user && showCreateBrainBox && (
+            <div className="flex flex-col sm:flex-row items-center gap-2 pt-2 border-t border-white/10">
+              <input
+                type="text"
+                value={newBrainName}
+                onChange={(e) => setNewBrainName(e.target.value)}
+                placeholder="Nombre del nuevo Cerebro StarSeed OS..."
+                className="w-full sm:flex-1 bg-black/60 border border-purple-500/35 rounded-lg px-3 py-1.5 text-xs text-white focus:border-cyan-400 focus:outline-none"
+              />
+              <input
+                type="text"
+                value={newBrainDesc}
+                onChange={(e) => setNewBrainDesc(e.target.value)}
+                placeholder="Descripción (opcional)..."
+                className="w-full sm:flex-1 bg-black/60 border border-white/15 rounded-lg px-3 py-1.5 text-xs text-white focus:border-cyan-400 focus:outline-none"
+              />
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  disabled={creatingBrain || !newBrainName.trim()}
+                  onClick={async () => {
+                    setCreatingBrain(true);
+                    const res = await fs.createBrain(newBrainName, newBrainDesc);
+                    setCreatingBrain(false);
+                    if (res.ok) {
+                      setNewBrainName('');
+                      setNewBrainDesc('');
+                      setShowCreateBrainBox(false);
+                      notify('success', `Cerebro "${res.brain?.name}" creado y vinculado.`);
+                    } else {
+                      notify('error', res.error || 'No se pudo crear el cerebro.');
+                    }
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-[11px] font-bold cursor-pointer disabled:opacity-40"
+                >
+                  {creatingBrain ? 'Creando...' : 'Crear'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowCreateBrainBox(false)}
+                  className="px-2.5 py-1.5 rounded-lg border border-white/15 text-[11px] text-slate-300 hover:bg-white/5 cursor-pointer"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Explicit Import Banner for Previously Saved Local Device Folders/Particles */}
+          {fs.user && fs.hasLocalGuestData && fs.canWriteCurrentBrain && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-3 py-2 rounded-xl bg-amber-950/40 border border-amber-500/35 text-[11px] text-amber-100">
+              <div className="flex items-center gap-2">
+                <Icon name="HardDrive" size={14} className="text-amber-300 shrink-0" />
+                <span>
+                  Tu biblioteca del cerebro se abrió aislada/vacía. Tienes{' '}
+                  <strong>{fs.localGuestStats.folders} carpetas</strong> y{' '}
+                  <strong>{fs.localGuestStats.files} partículas</strong> guardadas localmente en este dispositivo.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={async () => {
+                  const ok = await fs.importLocalGuestDataToCurrentBrain('merge');
+                  if (ok) {
+                    notify(
+                      'success',
+                      `Carpetas y partículas locales agregadas al cerebro "${fs.selectedBrain?.name || 'actual'}".`
+                    );
+                  }
+                }}
+                className="px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-[10px] uppercase tracking-wider shrink-0 cursor-pointer"
+              >
+                + Agregar Locales a este Cerebro
+              </button>
+            </div>
+          )}
+        </div>
+
         {/* Status Toast */}
         {statusMessage && (
           <div
@@ -1116,14 +1395,33 @@ const FileExplorer: React.FC<Props> = ({ mode, onFileSelect, onClose, fs, curren
               </div>
 
               <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-                <span className="text-[11px] text-slate-400">
-                  Carpeta destino: <strong className="text-cyan-300">{currentFolder.name}</strong> ·{' '}
-                  {currentConfig?.oscillators?.length || 0} osciladores activos
-                </span>
+                <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+                  {fs.user && fs.brains.length > 0 && (
+                    <span className="inline-flex items-center gap-1.5 bg-black/50 border border-purple-500/30 rounded-lg px-2 py-1">
+                      <Icon name="Brain" size={12} className="text-purple-300" />
+                      <select
+                        aria-label="Cerebro destino al guardar"
+                        value={fs.selectedBrainId || ''}
+                        onChange={(e) => fs.selectBrain(e.target.value)}
+                        className="bg-transparent text-[11px] font-bold text-purple-200 focus:outline-none cursor-pointer"
+                      >
+                        {fs.brains.map((b) => (
+                          <option key={b.id} value={b.id} className="bg-[#0a0f1f] text-white">
+                            {b.name} ({b.accessLevel.toUpperCase()})
+                          </option>
+                        ))}
+                      </select>
+                    </span>
+                  )}
+                  <span>
+                    Carpeta destino: <strong className="text-cyan-300">{currentFolder.name}</strong> ·{' '}
+                    {currentConfig?.oscillators?.length || 0} osciladores activos
+                  </span>
+                </div>
                 <button
                   type="button"
                   onClick={handleSave}
-                  disabled={!saveFileName.trim()}
+                  disabled={!saveFileName.trim() || (fs.user ? !fs.canWriteCurrentBrain : false)}
                   className="w-full sm:w-auto px-8 py-2.5 rounded-xl font-bold uppercase tracking-widest text-xs transition-all border bg-cyan-500/20 hover:bg-cyan-500 text-cyan-200 hover:text-black border-cyan-400/50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                 >
                   Guardar Partícula

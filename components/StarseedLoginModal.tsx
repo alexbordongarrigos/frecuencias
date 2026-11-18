@@ -146,7 +146,7 @@ export const StarseedLoginModal: React.FC<StarseedLoginModalProps> = ({
             <div className="relative">
               <input
                 type="text"
-                placeholder="ej: alexbordon o usuario@star.seed"
+                placeholder="ej: usuario o usuario@star.seed"
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
                 autoFocus
@@ -155,7 +155,7 @@ export const StarseedLoginModal: React.FC<StarseedLoginModalProps> = ({
               />
             </div>
             <p className="text-[10px] text-slate-500 mt-1">
-              Puedes ingresar tu nombre de usuario (ej. <span className="text-amber-400/80">alexbordon</span>) o tu correo completo.
+              Puedes ingresar tu nombre de usuario (ej. <span className="text-amber-400/80">@usuario</span>) o tu correo completo.
             </p>
           </div>
 

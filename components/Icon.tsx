@@ -11,7 +11,8 @@ import {
   Lock, Unlock, Compass, Hexagon, CheckCircle, Circle, EyeOff, UserCheck, RadioReceiver, Server, Send,
   XCircle, Anchor, HelpCircle, Phone, Volume2, VolumeX, Grid, LayoutGrid, List, ExternalLink, LogIn, AlertCircle, Check,
   Sun, Sparkles, Atom, Magnet, Cpu, Terminal, Copy, Move, ArrowUpRight, BookOpen, Gauge, Flame, Droplets, Square, Rocket,
-  Wifi, WifiOff, Languages
+  Wifi, WifiOff, Languages,
+  HardDrive, Database, FolderPlus, CloudUpload, Share2, CheckCircle2
 } from 'lucide-react';
 
 export const icons = {
@@ -122,7 +123,13 @@ export const icons = {
   Rocket,
   Wifi,
   WifiOff,
-  Languages
+  Languages,
+  HardDrive,
+  Database,
+  FolderPlus,
+  CloudUpload,
+  Share2,
+  CheckCircle2
 };
 
 interface IconProps {

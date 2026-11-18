@@ -24,6 +24,7 @@ import {
   RADIATION_MEDIUMS,
   OmniProfile,
   OscillatorState,
+  PresetContent,
   WaveType
 } from '../types';
 import { autoSuggestTechnicalRecommendation } from '../utils/frequencyAnalysis';
@@ -39,6 +40,7 @@ interface Props {
   onJoinSession: (session: LiveSession) => void;
   currentOscillators?: OscillatorState[];
   onStartSessionRequest?: () => void;
+  onSavePresetToLibrary?: (name: string, content: PresetContent, category?: string) => void;
 }
 
 const EDITABLE_CATEGORIES = CATEGORIES.filter(c => c.id !== 'all');
@@ -48,7 +50,8 @@ const OnlineLibrary: React.FC<Props> = ({
   onMixPreset,
   onJoinSession,
   currentOscillators = [],
-  onStartSessionRequest
+  onStartSessionRequest,
+  onSavePresetToLibrary
 }) => {
   const [user, setUser] = useState<StarseedUser | null>(null);
   const [loading, setLoading] = useState(true);
@@ -471,11 +474,10 @@ const OnlineLibrary: React.FC<Props> = ({
       {/* Status Banner */}
       {feedbackBanner && (
         <div
-          className={`mb-4 px-4 py-2.5 rounded-xl border text-xs font-semibold flex items-center justify-between gap-2 shrink-0 ${
-            feedbackBanner.type === 'success'
-              ? 'bg-emerald-950/70 border-emerald-500/40 text-emerald-200'
-              : 'bg-red-950/70 border-red-500/40 text-red-200'
-          }`}
+          className={`mb-4 px-4 py-2.5 rounded-xl border text-xs font-semibold flex items-center justify-between gap-2 shrink-0 ${feedbackBanner.type === 'success'
+            ? 'bg-emerald-950/70 border-emerald-500/40 text-emerald-200'
+            : 'bg-red-950/70 border-red-500/40 text-red-200'
+            }`}
         >
           <span className="flex items-center gap-2">
             <Icon name={feedbackBanner.type === 'success' ? 'Check' : 'AlertCircle'} size={14} />
@@ -593,9 +595,8 @@ const OnlineLibrary: React.FC<Props> = ({
         <div className="grid grid-cols-2 sm:flex bg-black/50 p-1 rounded-2xl border border-white/10 w-full lg:w-auto gap-1">
           <button
             type="button"
-            className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-colors flex items-center justify-center gap-2 cursor-pointer ${
-              activeTab === 'vibras' ? 'bg-cyan-500 text-black' : 'text-slate-400 hover:text-white'
-            }`}
+            className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-colors flex items-center justify-center gap-2 cursor-pointer ${activeTab === 'vibras' ? 'bg-cyan-500 text-black' : 'text-slate-400 hover:text-white'
+              }`}
             onClick={() => {
               setActiveTab('vibras');
               setSelectedCategory('all');
@@ -605,9 +606,8 @@ const OnlineLibrary: React.FC<Props> = ({
           </button>
           <button
             type="button"
-            className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-colors flex items-center justify-center gap-2 cursor-pointer ${
-              activeTab === 'entonacion' ? 'bg-purple-500 text-white' : 'text-slate-400 hover:text-white'
-            }`}
+            className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-colors flex items-center justify-center gap-2 cursor-pointer ${activeTab === 'entonacion' ? 'bg-purple-500 text-white' : 'text-slate-400 hover:text-white'
+              }`}
             onClick={() => {
               setActiveTab('entonacion');
               setSelectedCategory('all');
@@ -617,20 +617,18 @@ const OnlineLibrary: React.FC<Props> = ({
           </button>
           <button
             type="button"
-            className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-colors flex items-center justify-center gap-2 cursor-pointer ${
-              activeTab === 'perfiles' ? 'bg-amber-500 text-black' : 'text-slate-400 hover:text-white'
-            }`}
+            className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-colors flex items-center justify-center gap-2 cursor-pointer ${activeTab === 'perfiles' ? 'bg-amber-500 text-black' : 'text-slate-400 hover:text-white'
+              }`}
             onClick={() => setActiveTab('perfiles')}
           >
             <Icon name="Users" size={16} /> Perfiles
           </button>
           <button
             type="button"
-            className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-colors flex items-center justify-center gap-2 cursor-pointer ${
-              activeTab === 'radar'
-                ? 'bg-cyan-500 text-black shadow-[0_0_15px_rgba(34,211,238,0.4)]'
-                : 'text-slate-400 hover:text-white'
-            }`}
+            className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-colors flex items-center justify-center gap-2 cursor-pointer ${activeTab === 'radar'
+              ? 'bg-cyan-500 text-black shadow-[0_0_15px_rgba(34,211,238,0.4)]'
+              : 'text-slate-400 hover:text-white'
+              }`}
             onClick={() => setActiveTab('radar')}
           >
             <Icon name="Activity" size={16} className="animate-pulse" /> Radar Mesh
@@ -663,18 +661,16 @@ const OnlineLibrary: React.FC<Props> = ({
                 <button
                   type="button"
                   onClick={() => setSortBy('recent')}
-                  className={`px-2.5 py-1 text-xs font-bold rounded-lg cursor-pointer ${
-                    sortBy === 'recent' ? 'bg-white/15 text-white' : 'text-slate-400'
-                  }`}
+                  className={`px-2.5 py-1 text-xs font-bold rounded-lg cursor-pointer ${sortBy === 'recent' ? 'bg-white/15 text-white' : 'text-slate-400'
+                    }`}
                 >
                   Recientes
                 </button>
                 <button
                   type="button"
                   onClick={() => setSortBy('popular')}
-                  className={`px-2.5 py-1 text-xs font-bold rounded-lg cursor-pointer ${
-                    sortBy === 'popular' ? 'bg-white/15 text-white' : 'text-slate-400'
-                  }`}
+                  className={`px-2.5 py-1 text-xs font-bold rounded-lg cursor-pointer ${sortBy === 'popular' ? 'bg-white/15 text-white' : 'text-slate-400'
+                    }`}
                 >
                   Populares
                 </button>
@@ -709,11 +705,10 @@ const OnlineLibrary: React.FC<Props> = ({
                 key={cat.id}
                 type="button"
                 onClick={() => setSelectedCategory(cat.id)}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all border cursor-pointer ${
-                  selectedCategory === cat.id
-                    ? 'bg-cyan-500/20 border-cyan-400/60 text-white shadow-[0_0_12px_rgba(34,211,238,0.25)]'
-                    : 'bg-black/45 border-white/10 text-slate-400 hover:bg-white/10 hover:text-white'
-                }`}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all border cursor-pointer ${selectedCategory === cat.id
+                  ? 'bg-cyan-500/20 border-cyan-400/60 text-white shadow-[0_0_12px_rgba(34,211,238,0.25)]'
+                  : 'bg-black/45 border-white/10 text-slate-400 hover:bg-white/10 hover:text-white'
+                  }`}
               >
                 <Icon name={cat.iconName} size={13} className={cat.color} />
                 <span>{cat.label}</span>
@@ -760,9 +755,8 @@ const OnlineLibrary: React.FC<Props> = ({
                   <div className="bg-gradient-to-br from-black/80 to-slate-900/80 border border-white/10 p-5 rounded-2xl hover:border-cyan-500/45 transition-all flex flex-col h-fit gap-3 shadow-lg">
                     <div className="flex items-start justify-between gap-2">
                       <span
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-[10px] font-bold uppercase tracking-wider ${
-                          knownCat?.color || 'text-cyan-300'
-                        }`}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-[10px] font-bold uppercase tracking-wider ${knownCat?.color || 'text-cyan-300'
+                          }`}
                       >
                         <Icon name={knownCat?.iconName || 'Layers'} size={11} />
                         {knownCat?.label || catKey}
@@ -870,11 +864,10 @@ const OnlineLibrary: React.FC<Props> = ({
                         <button
                           type="button"
                           onClick={() => togglePreview(`preset-${preset.id}`, oscs)}
-                          className={`p-2 rounded-xl border transition-colors flex items-center justify-center shrink-0 cursor-pointer ${
-                            isPreviewing
-                              ? 'bg-cyan-500/25 border-cyan-400 text-cyan-200'
-                              : 'bg-black/50 border-white/10 hover:border-white/25 text-slate-300 hover:text-white'
-                          }`}
+                          className={`p-2 rounded-xl border transition-colors flex items-center justify-center shrink-0 cursor-pointer ${isPreviewing
+                            ? 'bg-cyan-500/25 border-cyan-400 text-cyan-200'
+                            : 'bg-black/50 border-white/10 hover:border-white/25 text-slate-300 hover:text-white'
+                            }`}
                           title={isPreviewing ? 'Detener pre-escucha' : 'Pre-escuchar partícula'}
                         >
                           <Icon name={isPreviewing ? 'Square' : 'Play'} size={15} />
@@ -902,6 +895,20 @@ const OnlineLibrary: React.FC<Props> = ({
                         >
                           Cargar
                         </button>
+
+                        {onSavePresetToLibrary && preset.content && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onSavePresetToLibrary(preset.name, preset.content!, preset.content?.category)
+                            }
+                            className="p-2 rounded-xl bg-black/50 border border-white/10 hover:border-purple-400/50 text-slate-300 hover:text-purple-200 transition-colors shrink-0 cursor-pointer"
+                            title="Guardar en Cerebro / Carpeta"
+                            aria-label="Guardar partícula en Cerebro o Carpeta"
+                          >
+                            <Icon name="FolderPlus" size={15} />
+                          </button>
+                        )}
                       </div>
 
                       {isOwn && (
@@ -946,18 +953,16 @@ const OnlineLibrary: React.FC<Props> = ({
                 <button
                   type="button"
                   onClick={() => setSortBy('recent')}
-                  className={`px-2.5 py-1 text-xs font-bold rounded-lg cursor-pointer ${
-                    sortBy === 'recent' ? 'bg-white/15 text-white' : 'text-slate-400'
-                  }`}
+                  className={`px-2.5 py-1 text-xs font-bold rounded-lg cursor-pointer ${sortBy === 'recent' ? 'bg-white/15 text-white' : 'text-slate-400'
+                    }`}
                 >
                   Nuevas
                 </button>
                 <button
                   type="button"
                   onClick={() => setSortBy('popular')}
-                  className={`px-2.5 py-1 text-xs font-bold rounded-lg cursor-pointer ${
-                    sortBy === 'popular' ? 'bg-white/15 text-white' : 'text-slate-400'
-                  }`}
+                  className={`px-2.5 py-1 text-xs font-bold rounded-lg cursor-pointer ${sortBy === 'popular' ? 'bg-white/15 text-white' : 'text-slate-400'
+                    }`}
                 >
                   Más Activas
                 </button>
@@ -989,11 +994,10 @@ const OnlineLibrary: React.FC<Props> = ({
                 key={cat.id}
                 type="button"
                 onClick={() => setSelectedCategory(cat.id)}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all border cursor-pointer ${
-                  selectedCategory === cat.id
-                    ? 'bg-purple-500/25 border-purple-400/60 text-white shadow-[0_0_12px_rgba(168,85,247,0.3)]'
-                    : 'bg-black/45 border-white/10 text-slate-400 hover:bg-white/10 hover:text-white'
-                }`}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all border cursor-pointer ${selectedCategory === cat.id
+                  ? 'bg-purple-500/25 border-purple-400/60 text-white shadow-[0_0_12px_rgba(168,85,247,0.3)]'
+                  : 'bg-black/45 border-white/10 text-slate-400 hover:bg-white/10 hover:text-white'
+                  }`}
               >
                 <Icon name={cat.iconName} size={13} className={cat.color} />
                 <span>{cat.label}</span>
@@ -1070,9 +1074,8 @@ const OnlineLibrary: React.FC<Props> = ({
 
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span
-                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white/5 border border-white/10 text-[10px] font-bold ${
-                            knownCat?.color || 'text-purple-300'
-                          }`}
+                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white/5 border border-white/10 text-[10px] font-bold ${knownCat?.color || 'text-purple-300'
+                            }`}
                         >
                           <Icon name={knownCat?.iconName || 'Layers'} size={10} />
                           {knownCat?.label || catKey}
@@ -1187,11 +1190,10 @@ const OnlineLibrary: React.FC<Props> = ({
                         <button
                           type="button"
                           onClick={() => togglePreview(`session-${session.id}`, oscs)}
-                          className={`p-2.5 rounded-xl border transition-colors flex items-center justify-center shrink-0 cursor-pointer ${
-                            isPreviewing
-                              ? 'bg-cyan-500/25 border-cyan-400 text-cyan-200'
-                              : 'bg-black/50 border-white/10 hover:border-white/25 text-slate-300 hover:text-white'
-                          }`}
+                          className={`p-2.5 rounded-xl border transition-colors flex items-center justify-center shrink-0 cursor-pointer ${isPreviewing
+                            ? 'bg-cyan-500/25 border-cyan-400 text-cyan-200'
+                            : 'bg-black/50 border-white/10 hover:border-white/25 text-slate-300 hover:text-white'
+                            }`}
                           title={isPreviewing ? 'Detener pre-escucha' : 'Pre-escuchar sonido'}
                         >
                           <Icon name={isPreviewing ? 'Square' : 'Play'} size={15} />
@@ -1206,6 +1208,23 @@ const OnlineLibrary: React.FC<Props> = ({
                         >
                           <Icon name="Headphones" size={15} /> {isOwn ? 'Entrar como Host' : 'Sincronizar'}
                         </button>
+
+                        {onSavePresetToLibrary && session.presetContent && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onSavePresetToLibrary(
+                                session.presetName || 'Sintonización Cuántica',
+                                session.presetContent,
+                                session.category
+                              )
+                            }
+                            className="p-2.5 rounded-xl bg-black/50 border border-white/10 hover:border-purple-400/50 text-slate-300 hover:text-purple-200 transition-colors shrink-0 cursor-pointer"
+                            title="Guardar configuración de sala en Cerebro / Carpeta"
+                          >
+                            <Icon name="FolderPlus" size={15} />
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1228,18 +1247,16 @@ const OnlineLibrary: React.FC<Props> = ({
                 <button
                   type="button"
                   onClick={() => setSortBy('recent')}
-                  className={`px-2.5 py-1 text-xs font-bold rounded-lg cursor-pointer ${
-                    sortBy === 'recent' ? 'bg-white/15 text-white' : 'text-slate-400'
-                  }`}
+                  className={`px-2.5 py-1 text-xs font-bold rounded-lg cursor-pointer ${sortBy === 'recent' ? 'bg-white/15 text-white' : 'text-slate-400'
+                    }`}
                 >
                   Recientes
                 </button>
                 <button
                   type="button"
                   onClick={() => setSortBy('popular')}
-                  className={`px-2.5 py-1 text-xs font-bold rounded-lg cursor-pointer ${
-                    sortBy === 'popular' ? 'bg-white/15 text-white' : 'text-slate-400'
-                  }`}
+                  className={`px-2.5 py-1 text-xs font-bold rounded-lg cursor-pointer ${sortBy === 'popular' ? 'bg-white/15 text-white' : 'text-slate-400'
+                    }`}
                 >
                   Más Resonantes
                 </button>
@@ -1310,11 +1327,10 @@ const OnlineLibrary: React.FC<Props> = ({
                           }
                         })
                       }
-                      className={`w-full py-2 rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2 cursor-pointer ${
-                        resonancesCache[p.id]
-                          ? 'bg-white/10 text-slate-300 hover:bg-red-500/20 hover:text-red-400'
-                          : 'bg-amber-500/20 text-amber-300 border border-amber-500/50 hover:bg-amber-500 hover:text-black'
-                      }`}
+                      className={`w-full py-2 rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2 cursor-pointer ${resonancesCache[p.id]
+                        ? 'bg-white/10 text-slate-300 hover:bg-red-500/20 hover:text-red-400'
+                        : 'bg-amber-500/20 text-amber-300 border border-amber-500/50 hover:bg-amber-500 hover:text-black'
+                        }`}
                     >
                       <Icon name="Radio" size={16} /> {resonancesCache[p.id] ? 'Dejar de Resonar' : 'Resonar'}
                     </button>

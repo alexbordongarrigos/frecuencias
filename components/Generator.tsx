@@ -280,10 +280,13 @@ const Generator: React.FC<Props> = ({
           <button
             onClick={() => { setExplorerMode('load'); setShowExplorer(true); }}
             disabled={!canEdit}
-            className="flex items-center justify-center gap-2.5 px-5 py-3.5 w-full sm:w-auto bg-purple-950/40 hover:bg-purple-900/60 text-purple-200 rounded-2xl text-xs sm:text-sm font-bold uppercase tracking-widest transition-all border-2 border-purple-500/30 hover:border-purple-400/50 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center justify-center gap-2.5 px-5 py-3.5 w-full sm:w-auto bg-purple-950/40 hover:bg-purple-900/60 text-purple-200 rounded-2xl text-xs sm:text-sm font-bold uppercase tracking-widest transition-all border-2 border-purple-500/30 hover:border-purple-400/50 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
           >
             <Icon name="Folder" size={18} />
             <span className="whitespace-nowrap">Cargar Preset</span>
+            <span className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/40 border border-white/10 text-[9px] font-mono text-cyan-300 max-w-[140px] truncate">
+              {fs.user ? (fs.selectedBrain?.name || 'Cerebro') : (fs.localLocationMeta?.label || 'Local')}
+            </span>
           </button>
 
           <button

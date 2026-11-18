@@ -38,6 +38,9 @@ import { StarseedLoginModal } from './components/StarseedLoginModal';
 import { autoSuggestTechnicalRecommendation } from './utils/frequencyAnalysis';
 import LanguageSelector from './components/LanguageSelector';
 import { LangCode, SUPPORTED_LANGUAGES, useReactiveTranslation } from './utils/i18n';
+import { useFileSystem } from './hooks/useFileSystem';
+import FileExplorer from './components/FileExplorer';
+import SaveToBrainModal from './components/SaveToBrainModal';
 
 export interface SessionPermissions {
   canEditFrequencies: boolean;
@@ -126,6 +129,25 @@ const App: React.FC = () => {
   const [showStartSessionModal, setShowStartSessionModal] = useState(false);
   const [presetToStart, setPresetToStart] = useState<PresetContent | null>(null);
   const [showLoginModal, setShowLoginModal] = useState(false);
+
+  // Unified Account / Brain & Local Device Explorer Store
+  const fs = useFileSystem();
+  const [showLibraryExplorer, setShowLibraryExplorer] = useState(false);
+  const [saveModalPayload, setSaveModalPayload] = useState<{
+    name: string;
+    category?: string;
+    content: PresetContent;
+    sourceLabel?: string;
+  } | null>(null);
+  const [librarySyncNotice, setLibrarySyncNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const libraryFileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const flashLibraryNotice = (type: 'success' | 'error', text: string) => {
+    setLibrarySyncNotice({ type, text });
+    setTimeout(() => {
+      setLibrarySyncNotice((prev) => (prev?.text === text ? null : prev));
+    }, 4500);
+  };
 
   React.useEffect(() => {
     getCurrentStarseedUser().then((user) => setCurrentUser(user));
@@ -578,6 +600,178 @@ const App: React.FC = () => {
                       </div>
                     </div>
 
+                    {/* Unified Brain / Local Device Library Synchronization Bar */}
+                    <div className="mt-4 pt-4 border-t border-white/10 relative z-10 flex flex-col gap-2.5">
+                      <div className="flex flex-col lg:flex-row items-center justify-between gap-2.5 bg-black/45 border border-white/10 rounded-2xl px-3.5 py-2.5">
+                        {fs.user ? (
+                          <div className="flex flex-wrap items-center justify-center lg:justify-start gap-2 w-full lg:w-auto">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-purple-300 flex items-center gap-1.5">
+                              <Icon name="Brain" size={14} className="text-purple-400" />
+                              Cerebro StarSeed OS:
+                            </span>
+                            <select
+                              aria-label="Seleccionar Cerebro para Biblioteca de Partículas"
+                              value={fs.selectedBrainId || ''}
+                              onChange={(e) => fs.selectBrain(e.target.value)}
+                              disabled={fs.isLoadingBrains || fs.brains.length === 0}
+                              className="bg-black/70 border border-purple-500/35 rounded-xl px-3 py-1.5 text-xs font-bold text-white focus:outline-none focus:border-cyan-400 cursor-pointer"
+                            >
+                              {fs.brains.map((b) => (
+                                <option key={b.id} value={b.id} className="bg-[#0a0f1f] text-white">
+                                  {b.name} ({b.accessLevel.toUpperCase()}
+                                  {b.isOwner ? ' · Propio' : ' · Compartido'})
+                                </option>
+                              ))}
+                            </select>
+
+                            {fs.selectedBrain && (
+                              <span
+                                className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase border ${
+                                  fs.selectedBrain.accessLevel === 'admin'
+                                    ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-200'
+                                    : fs.selectedBrain.accessLevel === 'escritura'
+                                    ? 'bg-cyan-500/15 border-cyan-400/40 text-cyan-200'
+                                    : 'bg-amber-500/15 border-amber-400/40 text-amber-200'
+                                }`}
+                              >
+                                {fs.selectedBrain.accessLevel}
+                              </span>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => fs.syncNow()}
+                              className="px-2.5 py-1 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/30 border border-cyan-400/35 text-[10px] font-bold uppercase text-cyan-200 flex items-center gap-1 cursor-pointer"
+                              title={fs.syncMessage || 'Sincronizar con la nube y dispositivos'}
+                            >
+                              <Icon
+                                name={fs.syncState === 'syncing' ? 'Loader' : fs.isOnline ? 'CloudUpload' : 'WifiOff'}
+                                size={11}
+                                className={fs.syncState === 'syncing' ? 'animate-spin' : ''}
+                              />
+                              {fs.syncState === 'synced'
+                                ? 'Sincronizado'
+                                : fs.syncState === 'offline_queued'
+                                ? 'Cola Offline'
+                                : fs.syncState === 'read_only'
+                                ? 'Solo Lectura'
+                                : 'Sincronizar'}
+                            </button>
+
+                            {fs.hasLocalGuestData && fs.canWriteCurrentBrain && (
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  const ok = await fs.importLocalGuestDataToCurrentBrain('merge');
+                                  if (ok) {
+                                    flashLibraryNotice(
+                                      'success',
+                                      `Carpetas locales agregadas al cerebro "${fs.selectedBrain?.name}".`
+                                    );
+                                  }
+                                }}
+                                className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/35 border border-amber-400/45 text-[10px] font-bold uppercase text-amber-200 flex items-center gap-1 cursor-pointer"
+                                title="Agregar carpetas y partículas guardadas localmente antes de iniciar sesión"
+                              >
+                                <Icon name="HardDrive" size={11} />
+                                + Agregar Locales ({fs.localGuestStats.files})
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="flex flex-wrap items-center justify-center lg:justify-start gap-2 w-full lg:w-auto">
+                            <span className="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
+                              <Icon name="HardDrive" size={14} className="text-cyan-400" />
+                              {fs.localLocationMeta
+                                ? `Almacenamiento recordado: ${fs.localLocationMeta.label}`
+                                : 'Biblioteca Local del Dispositivo (sin cuenta StarSeed OS)'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const res = await fs.chooseLocalDeviceLocation('directory');
+                                if (res.ok && res.meta) {
+                                  flashLibraryNotice('success', `Carpeta local recordada: ${res.meta.label}`);
+                                } else if (res.error) {
+                                  flashLibraryNotice('error', res.error);
+                                }
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/30 border border-cyan-400/35 text-[10px] font-bold uppercase text-cyan-200 flex items-center gap-1 cursor-pointer"
+                            >
+                              <Icon name="FolderOpen" size={11} /> Elegir Carpeta Local
+                            </button>
+                          </div>
+                        )}
+
+                        <div className="flex flex-wrap items-center justify-center gap-2 shrink-0">
+                          <input
+                            ref={libraryFileInputRef}
+                            type="file"
+                            accept=".json,.omni,.omni-library.json"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              const reader = new FileReader();
+                              reader.onload = (ev) => {
+                                const text = ev.target?.result;
+                                if (typeof text === 'string') {
+                                  const ok = fs.importSystem(text, { mode: 'merge', targetFolderId: 'root' });
+                                  if (ok) {
+                                    flashLibraryNotice(
+                                      'success',
+                                      `"${file.name}" importado con todas sus carpetas y configuraciones.`
+                                    );
+                                    setShowLibraryExplorer(true);
+                                  } else {
+                                    flashLibraryNotice(
+                                      'error',
+                                      'Archivo no compatible o el cerebro actual es de solo lectura.'
+                                    );
+                                  }
+                                }
+                              };
+                              reader.readAsText(file);
+                              e.target.value = '';
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => libraryFileInputRef.current?.click()}
+                            className="px-3 py-1.5 rounded-xl bg-indigo-500/15 hover:bg-indigo-500/30 border border-indigo-400/35 text-[10px] font-bold uppercase tracking-wider text-indigo-200 flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Icon name="Upload" size={12} /> Importar Archivo
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowLibraryExplorer(true)}
+                            className="px-3.5 py-1.5 rounded-xl bg-purple-500/20 hover:bg-purple-500/35 border border-purple-400/45 text-[10px] font-bold uppercase tracking-wider text-purple-100 flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Icon name="Folder" size={13} /> Abrir Carpetas ({fs.root.children?.length || 0})
+                          </button>
+                        </div>
+                      </div>
+
+                      {librarySyncNotice && (
+                        <div
+                          className={`px-3.5 py-2 rounded-xl border text-xs font-semibold flex items-center justify-between gap-2 ${
+                            librarySyncNotice.type === 'success'
+                              ? 'bg-emerald-950/70 border-emerald-500/40 text-emerald-200'
+                              : 'bg-red-950/70 border-red-500/40 text-red-200'
+                          }`}
+                        >
+                          <span>{librarySyncNotice.text}</span>
+                          <button
+                            type="button"
+                            onClick={() => setLibrarySyncNotice(null)}
+                            className="text-white/60 hover:text-white cursor-pointer"
+                          >
+                            <Icon name="X" size={13} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
                     {/* Filters: Radiation Mediums & Categories */}
                     {showFilters && (
                       <div className="mt-5 pt-5 border-t border-white/10 space-y-4 relative z-10">
@@ -669,6 +863,24 @@ const App: React.FC = () => {
                         delay={Math.min(index, 12) * 35}
                         onAddToPlayer={handleAddToPlayer}
                         oscillatorsList={getParticleOscillators(item)}
+                        onSaveToLibrary={(particle) => {
+                          const rawOscs = getParticleOscillators(particle);
+                          const normalized = normalizeLoadedOscillators(rawOscs);
+                          setSaveModalPayload({
+                            name: particle.name,
+                            category: particle.category,
+                            sourceLabel: 'Biblioteca Principal',
+                            content: {
+                              oscillators: normalized,
+                              dateCreated: Date.now(),
+                              category: particle.category,
+                              description: particle.description,
+                              technicalRecommendation:
+                                particle.technicalRecommendation ||
+                                autoSuggestTechnicalRecommendation(normalized, particle.category, particle.name),
+                            },
+                          });
+                        }}
                       />
                     )}
                   />
@@ -720,6 +932,17 @@ const App: React.FC = () => {
               <div className="min-h-[70dvh] pb-36">
                 <OnlineLibrary
                   currentOscillators={audio.oscillators}
+                  onSavePresetToLibrary={(name, content, category) => {
+                    setSaveModalPayload({
+                      name,
+                      category: category || content.category || 'custom',
+                      sourceLabel: 'Comunidad StarSeed OS',
+                      content: {
+                        ...content,
+                        oscillators: normalizeLoadedOscillators(content.oscillators || []),
+                      },
+                    });
+                  }}
                   onLoadPreset={(node) => {
                     if (node.content?.oscillators) {
                       const normalized = normalizeLoadedOscillators(node.content.oscillators);
@@ -788,6 +1011,41 @@ const App: React.FC = () => {
         )}
 
         {/* --- Modals --- */}
+        {showLibraryExplorer && (
+          <FileExplorer
+            mode="load"
+            fs={fs}
+            onClose={() => setShowLibraryExplorer(false)}
+            onFileSelect={(content, mix) => {
+              const normalized = normalizeLoadedOscillators(content.oscillators || []);
+              if (mix) {
+                normalized.forEach((osc) => audio.addOscillator(osc));
+              } else {
+                audio.loadPreset({ ...content, oscillators: normalized });
+              }
+              setShowLibraryExplorer(false);
+              setViewMode('generator');
+            }}
+            currentConfig={{
+              oscillators: audio.oscillators,
+              dateCreated: Date.now(),
+              description: 'Configuración desde Espectrómetro',
+            }}
+          />
+        )}
+
+        {saveModalPayload && (
+          <SaveToBrainModal
+            isOpen={Boolean(saveModalPayload)}
+            onClose={() => setSaveModalPayload(null)}
+            fs={fs}
+            initialName={saveModalPayload.name}
+            initialCategory={saveModalPayload.category}
+            initialContent={saveModalPayload.content}
+            sourceLabel={saveModalPayload.sourceLabel}
+          />
+        )}
+
         <StarseedLoginModal
           isOpen={showLoginModal}
           onClose={() => setShowLoginModal(false)}
