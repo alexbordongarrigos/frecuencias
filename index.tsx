@@ -25,8 +25,9 @@ if ('serviceWorker' in navigator) {
     }
   });
   
-  // Periodically check for updates (every 5 minutes)
+  // Check immediately on ready and periodically every 5 minutes
   navigator.serviceWorker.ready.then((registration) => {
+    registration.update();
     setInterval(() => {
       registration.update();
     }, 5 * 60 * 1000);

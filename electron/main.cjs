@@ -20,6 +20,8 @@ function createWindow() {
     win.loadURL('http://localhost:3000');
     win.webContents.openDevTools();
   } else {
+    win.webContents.session.clearCache().catch(() => {});
+    win.webContents.session.clearStorageData({ storages: ['serviceworkers', 'cachestorage'] }).catch(() => {});
     win.loadFile(path.join(__dirname, '../dist/index.html'));
   }
 
