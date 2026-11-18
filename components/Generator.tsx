@@ -11,6 +11,7 @@ import SpiralVisualizer from './SpiralVisualizer';
 import AIGeneratorModal from './AIGeneratorModal';
 import Icon from './Icon';
 import FileExplorer from './FileExplorer';
+import AdaptiveParticleGrid from './AdaptiveParticleGrid';
 
 interface Props {
   audio: ReturnType<typeof useAudio>;
@@ -618,37 +619,46 @@ const Generator: React.FC<Props> = ({
       )}
 
       {/* --- Oscillator List --- */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 items-start">
-        {oscillators.map(osc => (
-          <OscillatorControls
-            key={osc.id}
-            osc={osc}
-            update={handleUpdateOscillator}
-            remove={handleRemoveOscillator}
-            analyser={getOscillatorAnalyser(osc.id)}
-            forceExpanded={expandAllOscillators}
-          />
-        ))}
+      <AdaptiveParticleGrid<OscillatorState | { id: '__add_oscillator__'; isAddCard: true }>
+        items={[...oscillators, { id: '__add_oscillator__', isAddCard: true }]}
+        getItemKey={(entry) => entry.id}
+        columnsConfig={{ base: 1, lg: 2, xl: 3 }}
+        gapPx={24}
+        renderItem={(entry) => {
+          if ('isAddCard' in entry) {
+            return (
+              <button
+                onClick={() => handleAddOscillator()}
+                disabled={!canEdit}
+                className="w-full group relative min-h-[260px] rounded-2xl border-2 border-dashed border-cyan-500/30 hover:border-cyan-400 bg-black/25 hover:bg-cyan-950/30 flex flex-col items-center justify-center gap-4 p-6 transition-all duration-300 shadow-[0_0_30px_rgba(0,0,0,0.3)] hover:shadow-[0_0_40px_rgba(34,211,238,0.2)] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <div className="w-16 h-16 rounded-full bg-cyan-950/60 border border-cyan-500/35 group-hover:border-cyan-400 flex items-center justify-center transition-all duration-300 group-hover:scale-110">
+                  <Icon name="Plus" className="text-cyan-400/80 group-hover:text-cyan-200 w-7 h-7 transition-colors" />
+                </div>
 
-        <button
-          onClick={() => handleAddOscillator()}
-          disabled={!canEdit}
-          className="group relative min-h-[260px] rounded-2xl border-2 border-dashed border-cyan-500/30 hover:border-cyan-400 bg-black/25 hover:bg-cyan-950/30 flex flex-col items-center justify-center gap-4 p-6 transition-all duration-300 shadow-[0_0_30px_rgba(0,0,0,0.3)] hover:shadow-[0_0_40px_rgba(34,211,238,0.2)] disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <div className="w-16 h-16 rounded-full bg-cyan-950/60 border border-cyan-500/35 group-hover:border-cyan-400 flex items-center justify-center transition-all duration-300 group-hover:scale-110">
-            <Icon name="Plus" className="text-cyan-400/80 group-hover:text-cyan-200 w-7 h-7 transition-colors" />
-          </div>
+                <div className="text-center">
+                  <h3 className="text-base sm:text-lg font-display font-black text-cyan-400/80 group-hover:text-cyan-200 tracking-widest uppercase mb-1 transition-colors">
+                    Añadir Frecuencia
+                  </h3>
+                  <p className="text-[11px] text-slate-500 group-hover:text-cyan-400/70 uppercase tracking-widest font-bold transition-colors">
+                    Nueva capa armónica
+                  </p>
+                </div>
+              </button>
+            );
+          }
 
-          <div className="text-center">
-            <h3 className="text-base sm:text-lg font-display font-black text-cyan-400/80 group-hover:text-cyan-200 tracking-widest uppercase mb-1 transition-colors">
-              Añadir Frecuencia
-            </h3>
-            <p className="text-[11px] text-slate-500 group-hover:text-cyan-400/70 uppercase tracking-widest font-bold transition-colors">
-              Nueva capa armónica
-            </p>
-          </div>
-        </button>
-      </div>
+          return (
+            <OscillatorControls
+              osc={entry}
+              update={handleUpdateOscillator}
+              remove={handleRemoveOscillator}
+              analyser={getOscillatorAnalyser(entry.id)}
+              forceExpanded={expandAllOscillators}
+            />
+          );
+        }}
+      />
     </div>
   );
 };

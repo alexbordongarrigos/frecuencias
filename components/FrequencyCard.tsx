@@ -12,6 +12,7 @@ import {
   computeOpticalOctaveNm
 } from '../utils/frequencyAnalysis';
 import Icon from './Icon';
+import ParticleWaveformBand from './ParticleWaveformBand';
 
 interface Props {
   item: FrequencyItem;
@@ -274,7 +275,7 @@ const FrequencyCard: React.FC<Props> = ({ item, delay, onAddToPlayer, oscillator
         bg-black/50 backdrop-blur-xl border border-white/10 hover:border-cyan-400/40
         rounded-3xl p-5 sm:p-6 transition-all duration-500 ease-out
         hover:shadow-[0_12px_45px_rgba(0,0,0,0.85),inset_0_0_24px_rgba(34,211,238,0.06)] hover:-translate-y-1.5
-        flex flex-col h-full animate-fade-in
+        flex flex-col h-fit animate-fade-in
       "
       style={{ animationDelay: `${Math.min(delay, 500)}ms` }}
     >
@@ -327,36 +328,12 @@ const FrequencyCard: React.FC<Props> = ({ item, delay, onAddToPlayer, oscillator
           </span>
         </div>
 
-        {/* Animated Harmonic Wave SVG */}
-        <div className={`w-full max-w-[240px] h-7 mt-3 overflow-hidden opacity-75 group-hover:opacity-100 transition-opacity ${colorClass}`}>
-          <svg viewBox="0 0 200 28" className="w-full h-full" preserveAspectRatio="none" aria-hidden="true">
-            <g>
-              <animateTransform
-                attributeName="transform"
-                type="translate"
-                from="0 0"
-                to="-100 0"
-                dur={isPreviewing ? '1.4s' : '4.5s'}
-                repeatCount="indefinite"
-              />
-              <path
-                d="M0 14 Q 12.5 2, 25 14 T 50 14 T 75 14 T 100 14 T 125 14 T 150 14 T 175 14 T 200 14 T 225 14 T 250 14 T 275 14 T 300 14"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.75"
-                strokeLinecap="round"
-                opacity="0.85"
-              />
-              <path
-                d="M0 14 Q 25 26, 50 14 T 100 14 T 150 14 T 200 14 T 250 14 T 300 14"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1"
-                strokeLinecap="round"
-                opacity="0.35"
-              />
-            </g>
-          </svg>
+        {/* Real Synthesized Multi-Layer Waveform Band */}
+        <div className="w-full mt-3">
+          <ParticleWaveformBand
+            oscillators={resolvedOscillators}
+            isPlaying={isPreviewing}
+          />
         </div>
 
         {/* Radiation Medium Badges */}
@@ -375,7 +352,7 @@ const FrequencyCard: React.FC<Props> = ({ item, delay, onAddToPlayer, oscillator
       </div>
 
       {/* Title, Location & Description */}
-      <div className="flex-grow relative z-10 text-center flex flex-col items-center">
+      <div className="w-full relative z-10 text-center flex flex-col items-center">
         <h3 className="text-lg sm:text-xl font-bold text-white mb-2 leading-snug group-hover:text-cyan-100 transition-colors">
           {item.name}
         </h3>

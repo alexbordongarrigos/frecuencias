@@ -30,6 +30,8 @@ import { autoSuggestTechnicalRecommendation } from '../utils/frequencyAnalysis';
 import PublishParticleModal from './PublishParticleModal';
 import MeshSignalMap from './MeshSignalMap';
 import { StarseedLoginModal } from './StarseedLoginModal';
+import ParticleWaveformBand from './ParticleWaveformBand';
+import AdaptiveParticleGrid from './AdaptiveParticleGrid';
 
 interface Props {
   onLoadPreset: (node: FileSystemNode) => void;
@@ -723,208 +725,212 @@ const OnlineLibrary: React.FC<Props> = ({
           </div>
 
           {/* Presets Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-8">
-            {filteredPresets.map(preset => {
-              const oscs = preset.content?.oscillators || [];
-              const catKey = preset.content?.category || 'Varios';
-              const knownCat = CATEGORIES.find(c => c.id === catKey);
-              const authorId = preset.content?.authorId;
-              const authorName =
-                preset.content?.authorName ||
-                (authorId ? profileMap[authorId]?.displayName : undefined) ||
-                'Explorador StarSeed';
-              const isOwn = Boolean(user && authorId && user.id === authorId);
-              const tech =
-                preset.content?.technicalRecommendation ||
-                autoSuggestTechnicalRecommendation(oscs, catKey, preset.name);
-              const mediumBadges = tech.recommendedMediums
-                .map(id => RADIATION_MEDIUMS.find(m => m.id === id))
-                .filter((m): m is (typeof RADIATION_MEDIUMS)[number] => Boolean(m));
-              const isExpanded = Boolean(expandedCards[`preset-${preset.id}`]);
-              const isPreviewing = previewingId === `preset-${preset.id}`;
+          {filteredPresets.length === 0 ? (
+            <div className="py-12 mb-8 text-center text-slate-500 border border-dashed border-white/10 rounded-2xl">
+              <Icon name="Inbox" size={32} className="mx-auto mb-2 opacity-50" />
+              <p>No hay partículas en esta categoría o búsqueda.</p>
+            </div>
+          ) : (
+            <AdaptiveParticleGrid<FileSystemNode>
+              items={filteredPresets}
+              getItemKey={(p) => p.id}
+              columnsConfig={{ base: 1, md: 2, lg: 3 }}
+              gapPx={16}
+              className="pb-8"
+              renderItem={(preset) => {
+                const oscs = preset.content?.oscillators || [];
+                const catKey = preset.content?.category || 'Varios';
+                const knownCat = CATEGORIES.find(c => c.id === catKey);
+                const authorId = preset.content?.authorId;
+                const authorName =
+                  preset.content?.authorName ||
+                  (authorId ? profileMap[authorId]?.displayName : undefined) ||
+                  'Explorador StarSeed';
+                const isOwn = Boolean(user && authorId && user.id === authorId);
+                const tech =
+                  preset.content?.technicalRecommendation ||
+                  autoSuggestTechnicalRecommendation(oscs, catKey, preset.name);
+                const mediumBadges = tech.recommendedMediums
+                  .map(id => RADIATION_MEDIUMS.find(m => m.id === id))
+                  .filter((m): m is (typeof RADIATION_MEDIUMS)[number] => Boolean(m));
+                const isExpanded = Boolean(expandedCards[`preset-${preset.id}`]);
+                const isPreviewing = previewingId === `preset-${preset.id}`;
 
-              return (
-                <div
-                  key={preset.id}
-                  className="bg-gradient-to-br from-black/80 to-slate-900/80 border border-white/10 p-5 rounded-2xl hover:border-cyan-500/45 transition-all flex flex-col gap-3 shadow-lg"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <span
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-[10px] font-bold uppercase tracking-wider ${
-                        knownCat?.color || 'text-cyan-300'
-                      }`}
-                    >
-                      <Icon name={knownCat?.iconName || 'Layers'} size={11} />
-                      {knownCat?.label || catKey}
-                    </span>
-                    <span className="text-[10px] uppercase tracking-wider bg-white/10 px-2.5 py-1 rounded-full text-slate-200 font-mono shrink-0">
-                      {oscs.length} Osc
-                    </span>
-                  </div>
-
-                  <div>
-                    <h4 className="font-bold text-white text-base sm:text-lg leading-snug">{preset.name}</h4>
-                    <div className="flex items-center justify-between gap-2 text-[11px] text-slate-400 mt-1">
-                      <span className="truncate">
-                        por <strong className="text-cyan-300">{authorName}</strong>
+                return (
+                  <div className="bg-gradient-to-br from-black/80 to-slate-900/80 border border-white/10 p-5 rounded-2xl hover:border-cyan-500/45 transition-all flex flex-col h-fit gap-3 shadow-lg">
+                    <div className="flex items-start justify-between gap-2">
+                      <span
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-[10px] font-bold uppercase tracking-wider ${
+                          knownCat?.color || 'text-cyan-300'
+                        }`}
+                      >
+                        <Icon name={knownCat?.iconName || 'Layers'} size={11} />
+                        {knownCat?.label || catKey}
                       </span>
-                      <span className="font-mono text-[10px] text-slate-500 shrink-0">
-                        {new Date(preset.createdAt).toLocaleDateString()}
+                      <span className="text-[10px] uppercase tracking-wider bg-white/10 px-2.5 py-1 rounded-full text-slate-200 font-mono shrink-0">
+                        {oscs.length} Osc
                       </span>
                     </div>
-                  </div>
 
-                  <p className="text-xs text-slate-300 font-light line-clamp-3">
-                    {preset.content?.description || 'Sin descripción'}
-                  </p>
+                    <div>
+                      <h4 className="font-bold text-white text-base sm:text-lg leading-snug">{preset.name}</h4>
+                      <div className="flex items-center justify-between gap-2 text-[11px] text-slate-400 mt-1">
+                        <span className="truncate">
+                          por <strong className="text-cyan-300">{authorName}</strong>
+                        </span>
+                        <span className="font-mono text-[10px] text-slate-500 shrink-0">
+                          {new Date(preset.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
 
-                  {/* Radiation Medium Badges */}
-                  <div className="flex flex-wrap gap-1">
-                    {mediumBadges.map(m => (
-                      <span
-                        key={m.id}
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-bold ${m.badgeClass}`}
-                      >
-                        <Icon name={m.iconName} size={10} />
-                        {m.shortLabel}
-                      </span>
-                    ))}
-                  </div>
+                    <ParticleWaveformBand oscillators={oscs} isPlaying={isPreviewing} compact />
 
-                  {preset.content?.tags && preset.content.tags.length > 0 && (
+                    <p className="text-xs text-slate-300 font-light line-clamp-3">
+                      {preset.content?.description || 'Sin descripción'}
+                    </p>
+
+                    {/* Radiation Medium Badges */}
                     <div className="flex flex-wrap gap-1">
-                      {preset.content.tags.map(tag => (
-                        <span key={tag} className="text-[9px] bg-white/5 px-2 py-0.5 rounded-full text-slate-300">
-                          #{tag}
+                      {mediumBadges.map(m => (
+                        <span
+                          key={m.id}
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-bold ${m.badgeClass}`}
+                        >
+                          <Icon name={m.iconName} size={10} />
+                          {m.shortLabel}
                         </span>
                       ))}
                     </div>
-                  )}
 
-                  {/* Collapsible Frequencies & Technical Recommendations */}
-                  <div className="rounded-xl bg-black/50 border border-white/10 overflow-hidden">
-                    <button
-                      type="button"
-                      onClick={() => toggleExpandCard(`preset-${preset.id}`)}
-                      className="w-full px-3 py-2 flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-300 hover:text-cyan-300 cursor-pointer"
-                    >
-                      <span className="flex items-center gap-1.5">
-                        <Icon name="Sliders" size={12} className="text-amber-400" />
-                        Frecuencias y Ficha Técnica
-                      </span>
-                      <Icon name={isExpanded ? 'ChevronUp' : 'ChevronDown'} size={13} />
-                    </button>
-
-                    {isExpanded && (
-                      <div className="px-3 pb-3 pt-1.5 border-t border-white/5 space-y-2 text-[11px]">
-                        <div className="space-y-1 max-h-36 overflow-y-auto custom-scrollbar">
-                          {oscs.map((osc, i) => (
-                            <div
-                              key={osc.id || i}
-                              className="flex flex-wrap items-center justify-between gap-1 bg-white/[0.03] rounded-lg px-2 py-1 font-mono text-[10px] text-slate-200 border border-white/5"
-                            >
-                              <span className="text-cyan-300 font-bold">{osc.frequency} Hz</span>
-                              <span className="text-purple-300">{osc.type}</span>
-                              <span className="text-emerald-300">{Math.round((osc.volume ?? 0.5) * 100)}%</span>
-                              <span className="text-slate-400">
-                                ({Number(osc.panX ?? 0).toFixed(1)},{Number(osc.panY ?? 0).toFixed(1)},{Number(osc.panZ ?? 0).toFixed(1)})
-                              </span>
-                              <span className="text-pink-300">C/V {Number(osc.crestValleyRatio ?? 1).toFixed(1)}</span>
-                            </div>
-                          ))}
-                        </div>
-
-                        <div className="bg-cyan-950/30 border border-cyan-500/20 rounded-lg p-2 space-y-1">
-                          <span className="block text-[10px] font-bold text-cyan-200">{tech.primaryMediumLabel}</span>
-                          <p className="text-[10px] text-slate-300 leading-relaxed">{tech.usageMode}</p>
-                          <div className="grid grid-cols-2 gap-1 pt-1 text-[10px] font-mono text-slate-300">
-                            <span>Vol: {tech.recommendedVolume}</span>
-                            <span>Dur: {tech.recommendedDuration || '20–45 min'}</span>
-                            <span>V: {tech.recommendedVoltage || '1.2–12V'}</span>
-                            <span>A: {tech.recommendedAmperage || '40–300mA'}</span>
-                            <span>W: {tech.recommendedWatts || '0.5–5W'}</span>
-                            <span>{tech.frequencyScales.khz || '—'}</span>
-                            <span>{tech.frequencyScales.mhz || '—'}</span>
-                            <span>{tech.frequencyScales.opticalNm || '—'}</span>
-                          </div>
-                        </div>
+                    {preset.content?.tags && preset.content.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {preset.content.tags.map(tag => (
+                          <span key={tag} className="text-[9px] bg-white/5 px-2 py-0.5 rounded-full text-slate-300">
+                            #{tag}
+                          </span>
+                        ))}
                       </div>
                     )}
-                  </div>
 
-                  {/* Card Actions */}
-                  <div className="mt-auto pt-3 border-t border-white/10 flex flex-col gap-2">
-                    <div className="flex items-center gap-2">
+                    {/* Collapsible Frequencies & Technical Recommendations */}
+                    <div className="rounded-xl bg-black/50 border border-white/10 overflow-hidden">
                       <button
                         type="button"
-                        onClick={() => togglePreview(`preset-${preset.id}`, oscs)}
-                        className={`p-2 rounded-xl border transition-colors flex items-center justify-center shrink-0 cursor-pointer ${
-                          isPreviewing
-                            ? 'bg-cyan-500/25 border-cyan-400 text-cyan-200'
-                            : 'bg-black/50 border-white/10 hover:border-white/25 text-slate-300 hover:text-white'
-                        }`}
-                        title={isPreviewing ? 'Detener pre-escucha' : 'Pre-escuchar partícula'}
+                        onClick={() => toggleExpandCard(`preset-${preset.id}`)}
+                        className="w-full px-3 py-2 flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-300 hover:text-cyan-300 cursor-pointer"
                       >
-                        <Icon name={isPreviewing ? 'Square' : 'Play'} size={15} />
+                        <span className="flex items-center gap-1.5">
+                          <Icon name="Sliders" size={12} className="text-amber-400" />
+                          Frecuencias y Ficha Técnica
+                        </span>
+                        <Icon name={isExpanded ? 'ChevronUp' : 'ChevronDown'} size={13} />
                       </button>
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          stopPreview();
-                          if (onMixPreset) onMixPreset(preset);
-                          else onLoadPreset(preset);
-                        }}
-                        className="flex-1 py-2 px-3 bg-purple-500/20 hover:bg-purple-500/40 text-purple-200 border border-purple-500/35 rounded-xl text-xs font-bold transition-all cursor-pointer"
-                      >
-                        + Mezclar
-                      </button>
+                      {isExpanded && (
+                        <div className="px-3 pb-3 pt-1.5 border-t border-white/5 space-y-2 text-[11px]">
+                          <div className="space-y-1 max-h-36 overflow-y-auto custom-scrollbar">
+                            {oscs.map((osc, i) => (
+                              <div
+                                key={osc.id || i}
+                                className="flex flex-wrap items-center justify-between gap-1 bg-white/[0.03] rounded-lg px-2 py-1 font-mono text-[10px] text-slate-200 border border-white/5"
+                              >
+                                <span className="text-cyan-300 font-bold">{osc.frequency} Hz</span>
+                                <span className="text-purple-300">{osc.type}</span>
+                                <span className="text-emerald-300">{Math.round((osc.volume ?? 0.5) * 100)}%</span>
+                                <span className="text-slate-400">
+                                  ({Number(osc.panX ?? 0).toFixed(1)},{Number(osc.panY ?? 0).toFixed(1)},{Number(osc.panZ ?? 0).toFixed(1)})
+                                </span>
+                                <span className="text-pink-300">C/V {Number(osc.crestValleyRatio ?? 1).toFixed(1)}</span>
+                              </div>
+                            ))}
+                          </div>
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          stopPreview();
-                          onLoadPreset(preset);
-                        }}
-                        className="flex-1 py-2 px-3 bg-cyan-500/20 hover:bg-cyan-500 text-cyan-200 hover:text-black border border-cyan-500/40 rounded-xl text-xs font-bold transition-all shadow-[0_0_12px_rgba(34,211,238,0.18)] cursor-pointer"
-                      >
-                        Cargar
-                      </button>
+                          <div className="bg-cyan-950/30 border border-cyan-500/20 rounded-lg p-2 space-y-1">
+                            <span className="block text-[10px] font-bold text-cyan-200">{tech.primaryMediumLabel}</span>
+                            <p className="text-[10px] text-slate-300 leading-relaxed">{tech.usageMode}</p>
+                            <div className="grid grid-cols-2 gap-1 pt-1 text-[10px] font-mono text-slate-300">
+                              <span>Vol: {tech.recommendedVolume}</span>
+                              <span>Dur: {tech.recommendedDuration || '20–45 min'}</span>
+                              <span>V: {tech.recommendedVoltage || '1.2–12V'}</span>
+                              <span>A: {tech.recommendedAmperage || '40–300mA'}</span>
+                              <span>W: {tech.recommendedWatts || '0.5–5W'}</span>
+                              <span>{tech.frequencyScales.khz || '—'}</span>
+                              <span>{tech.frequencyScales.mhz || '—'}</span>
+                              <span>{tech.frequencyScales.opticalNm || '—'}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
-                    {isOwn && (
+                    {/* Card Actions */}
+                    <div className="pt-3 border-t border-white/10 flex flex-col gap-2">
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => {
-                            setEditingCommunityPreset(preset);
-                            setShowPublishModal(true);
-                          }}
-                          className="flex-1 py-1.5 px-3 bg-amber-500/15 hover:bg-amber-500/30 border border-amber-500/30 text-amber-200 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+                          onClick={() => togglePreview(`preset-${preset.id}`, oscs)}
+                          className={`p-2 rounded-xl border transition-colors flex items-center justify-center shrink-0 cursor-pointer ${
+                            isPreviewing
+                              ? 'bg-cyan-500/25 border-cyan-400 text-cyan-200'
+                              : 'bg-black/50 border-white/10 hover:border-white/25 text-slate-300 hover:text-white'
+                          }`}
+                          title={isPreviewing ? 'Detener pre-escucha' : 'Pre-escuchar partícula'}
                         >
-                          <Icon name="Edit3" size={12} /> Editar / Modificar
+                          <Icon name={isPreviewing ? 'Square' : 'Play'} size={15} />
                         </button>
+
                         <button
                           type="button"
-                          onClick={() => handleDeleteCommunityPreset(preset)}
-                          className="py-1.5 px-3 bg-red-500/15 hover:bg-red-500/30 border border-red-500/30 text-red-300 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer"
+                          onClick={() => {
+                            stopPreview();
+                            if (onMixPreset) onMixPreset(preset);
+                            else onLoadPreset(preset);
+                          }}
+                          className="flex-1 py-2 px-3 bg-purple-500/20 hover:bg-purple-500/40 text-purple-200 border border-purple-500/35 rounded-xl text-xs font-bold transition-all cursor-pointer"
                         >
-                          <Icon name="Trash2" size={12} /> Eliminar
+                          + Mezclar
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            stopPreview();
+                            onLoadPreset(preset);
+                          }}
+                          className="flex-1 py-2 px-3 bg-cyan-500/20 hover:bg-cyan-500 text-cyan-200 hover:text-black border border-cyan-500/40 rounded-xl text-xs font-bold transition-all shadow-[0_0_12px_rgba(34,211,238,0.18)] cursor-pointer"
+                        >
+                          Cargar
                         </button>
                       </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
 
-            {filteredPresets.length === 0 && (
-              <div className="col-span-full py-12 text-center text-slate-500 border border-dashed border-white/10 rounded-2xl">
-                <Icon name="Inbox" size={32} className="mx-auto mb-2 opacity-50" />
-                <p>No hay partículas en esta categoría o búsqueda.</p>
-              </div>
-            )}
-          </div>
+                      {isOwn && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingCommunityPreset(preset);
+                              setShowPublishModal(true);
+                            }}
+                            className="flex-1 py-1.5 px-3 bg-amber-500/15 hover:bg-amber-500/30 border border-amber-500/30 text-amber-200 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+                          >
+                            <Icon name="Edit3" size={12} /> Editar / Modificar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteCommunityPreset(preset)}
+                            className="py-1.5 px-3 bg-red-500/15 hover:bg-red-500/30 border border-red-500/30 text-red-300 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer"
+                          >
+                            <Icon name="Trash2" size={12} /> Eliminar
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              }}
+            />
+          )}
         </div>
       )}
 
@@ -998,211 +1004,215 @@ const OnlineLibrary: React.FC<Props> = ({
             ))}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-8">
-            {sortedSessions.map(session => {
-              const oscs = session.presetContent?.oscillators || [];
-              const catKey = session.category || session.presetContent?.category || 'Varios';
-              const knownCat = CATEGORIES.find(c => c.id === catKey);
-              const tech =
-                session.presetContent?.technicalRecommendation ||
-                autoSuggestTechnicalRecommendation(oscs, catKey, session.presetName);
-              const isOwn =
-                (user?.id && user.id === session.hostId) ||
-                session.hostId === 'local-host';
-              const isExpanded = Boolean(expandedCards[`session-${session.id}`]);
-              const isPreviewing = previewingId === `session-${session.id}`;
-              const avgFreq =
-                oscs.length > 0
-                  ? (oscs.reduce((acc, o) => acc + (Number(o.frequency) || 0), 0) / oscs.length).toFixed(2)
-                  : '0.00';
+          {sortedSessions.length === 0 ? (
+            <div className="py-16 mb-8 text-center text-slate-500 border border-dashed border-white/10 rounded-2xl">
+              <Icon name="MicOff" size={32} className="mx-auto mb-3 opacity-40" />
+              <p className="mb-1 text-white/70">No hay sintonizaciones activas.</p>
+              <p className="text-xs">Inicia una sesión local o global y transmite al universo cuántico.</p>
+            </div>
+          ) : (
+            <AdaptiveParticleGrid<LiveSession>
+              items={sortedSessions}
+              getItemKey={(s) => s.id}
+              columnsConfig={{ base: 1, md: 2 }}
+              gapPx={16}
+              className="pb-8"
+              renderItem={(session) => {
+                const oscs = session.presetContent?.oscillators || [];
+                const catKey = session.category || session.presetContent?.category || 'Varios';
+                const knownCat = CATEGORIES.find(c => c.id === catKey);
+                const tech =
+                  session.presetContent?.technicalRecommendation ||
+                  autoSuggestTechnicalRecommendation(oscs, catKey, session.presetName);
+                const isOwn =
+                  (user?.id && user.id === session.hostId) ||
+                  session.hostId === 'local-host';
+                const isExpanded = Boolean(expandedCards[`session-${session.id}`]);
+                const isPreviewing = previewingId === `session-${session.id}`;
+                const avgFreq =
+                  oscs.length > 0
+                    ? (oscs.reduce((acc, o) => acc + (Number(o.frequency) || 0), 0) / oscs.length).toFixed(2)
+                    : '0.00';
 
-              return (
-                <div
-                  key={session.id}
-                  className="bg-gradient-to-br from-black/85 to-[#1b152c]/85 border border-purple-500/35 rounded-2xl hover:border-purple-400 transition-all relative overflow-hidden flex flex-col shadow-lg"
-                >
-                  <div className="absolute inset-0 z-0 pointer-events-none">
-                    {session.cover_url ? (
-                      <img src={session.cover_url} alt="" className="w-full h-full object-cover opacity-20 mix-blend-screen" />
-                    ) : (
-                      <div className="w-full h-full bg-gradient-to-br from-purple-500/10 to-transparent blur-2xl" />
-                    )}
-                  </div>
-
-                  <div className="relative z-10 flex flex-col h-full p-5 gap-3">
-                    <div className="flex justify-between items-start gap-2">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-10 h-10 rounded-full border-2 border-purple-500/50 overflow-hidden bg-black/60 shrink-0 flex items-center justify-center">
-                          {session.avatar_url ? (
-                            <img src={session.avatar_url} alt={session.hostName} className="w-full h-full object-cover" />
-                          ) : (
-                            <Icon name="User" size={18} className="text-purple-300" />
-                          )}
-                        </div>
-                        <div className="min-w-0">
-                          <h3 className="text-base sm:text-lg font-bold text-white leading-tight truncate">
-                            {session.presetName}
-                          </h3>
-                          <p className="text-xs text-slate-400 truncate">
-                            por <span className="text-purple-300 font-bold">{session.hostName}</span>
-                          </p>
-                        </div>
-                      </div>
-                      <span className="flex items-center gap-1 text-[10px] bg-red-500/20 text-red-300 border border-red-500/30 px-2.5 py-1 rounded-full font-bold animate-pulse whitespace-nowrap shrink-0">
-                        <Icon name="Radio" size={10} /> EN VIVO
-                      </span>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white/5 border border-white/10 text-[10px] font-bold ${
-                          knownCat?.color || 'text-purple-300'
-                        }`}
-                      >
-                        <Icon name={knownCat?.iconName || 'Layers'} size={10} />
-                        {knownCat?.label || catKey}
-                      </span>
-                      {session.useLocalMesh && (
-                        <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[10px] font-bold">
-                          Mesh Local
-                        </span>
+                return (
+                  <div className="bg-gradient-to-br from-black/85 to-[#1b152c]/85 border border-purple-500/35 rounded-2xl hover:border-purple-400 transition-all relative overflow-hidden flex flex-col h-fit shadow-lg">
+                    <div className="absolute inset-0 z-0 pointer-events-none">
+                      {session.cover_url ? (
+                        <img src={session.cover_url} alt="" className="w-full h-full object-cover opacity-20 mix-blend-screen" />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-br from-purple-500/10 to-transparent blur-2xl" />
                       )}
                     </div>
 
-                    <p className="text-xs text-slate-300 line-clamp-2 font-light">
-                      {session.description || session.presetContent?.description || 'Sin descripción.'}
-                    </p>
-
-                    <div className="bg-black/55 rounded-xl p-2.5 text-xs text-slate-300 flex flex-col gap-1 border border-white/10">
-                      <div className="flex justify-between items-center">
-                        <span>Frecuencias Activas:</span>
-                        <span className="text-white font-mono font-bold">{oscs.length}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span>Promedio Armónico:</span>
-                        <span className="text-cyan-300 font-mono font-bold">{avgFreq} Hz</span>
-                      </div>
-                    </div>
-
-                    {/* Collapsible Live Session Inspector */}
-                    <div className="rounded-xl bg-black/50 border border-white/10 overflow-hidden">
-                      <button
-                        type="button"
-                        onClick={() => toggleExpandCard(`session-${session.id}`)}
-                        className="w-full px-3 py-2 flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-300 hover:text-purple-300 cursor-pointer"
-                      >
-                        <span className="flex items-center gap-1.5">
-                          <Icon name="Sliders" size={12} className="text-cyan-400" />
-                          Inspeccionar Frecuencias y Recomendación
-                        </span>
-                        <Icon name={isExpanded ? 'ChevronUp' : 'ChevronDown'} size={13} />
-                      </button>
-
-                      {isExpanded && (
-                        <div className="px-3 pb-3 pt-1.5 border-t border-white/5 space-y-2 text-[11px]">
-                          <div className="space-y-1 max-h-36 overflow-y-auto custom-scrollbar">
-                            {oscs.map((osc, i) => (
-                              <div
-                                key={osc.id || i}
-                                className="flex flex-wrap items-center justify-between gap-1 bg-white/[0.03] rounded-lg px-2 py-1 font-mono text-[10px] text-slate-200 border border-white/5"
-                              >
-                                <span className="text-cyan-300 font-bold">{osc.frequency} Hz</span>
-                                <span className="text-purple-300">{osc.type}</span>
-                                <span className="text-emerald-300">{Math.round((osc.volume ?? 0.5) * 100)}%</span>
-                                <span className="text-slate-400">Pan {Number(osc.panX ?? 0).toFixed(1)}</span>
-                              </div>
-                            ))}
+                    <div className="relative z-10 flex flex-col h-fit p-5 gap-3">
+                      <div className="flex justify-between items-start gap-2">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-10 h-10 rounded-full border-2 border-purple-500/50 overflow-hidden bg-black/60 shrink-0 flex items-center justify-center">
+                            {session.avatar_url ? (
+                              <img src={session.avatar_url} alt={session.hostName} className="w-full h-full object-cover" />
+                            ) : (
+                              <Icon name="User" size={18} className="text-purple-300" />
+                            )}
                           </div>
-                          <div className="bg-purple-950/30 border border-purple-500/20 rounded-lg p-2 space-y-1">
-                            <span className="block text-[10px] font-bold text-purple-200">{tech.primaryMediumLabel}</span>
-                            <p className="text-[10px] text-slate-300">{tech.usageMode}</p>
-                            <div className="grid grid-cols-2 gap-1 text-[10px] font-mono text-slate-300 pt-1">
-                              <span>Vol: {tech.recommendedVolume}</span>
-                              <span>V: {tech.recommendedVoltage || '1.2–12V'}</span>
-                              <span>W: {tech.recommendedWatts || '0.5–5W'}</span>
-                              <span>{tech.frequencyScales.opticalNm || '—'}</span>
+                          <div className="min-w-0">
+                            <h3 className="text-base sm:text-lg font-bold text-white leading-tight truncate">
+                              {session.presetName}
+                            </h3>
+                            <p className="text-xs text-slate-400 truncate">
+                              por <span className="text-purple-300 font-bold">{session.hostName}</span>
+                            </p>
+                          </div>
+                        </div>
+                        <span className="flex items-center gap-1 text-[10px] bg-red-500/20 text-red-300 border border-red-500/30 px-2.5 py-1 rounded-full font-bold animate-pulse whitespace-nowrap shrink-0">
+                          <Icon name="Radio" size={10} /> EN VIVO
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white/5 border border-white/10 text-[10px] font-bold ${
+                            knownCat?.color || 'text-purple-300'
+                          }`}
+                        >
+                          <Icon name={knownCat?.iconName || 'Layers'} size={10} />
+                          {knownCat?.label || catKey}
+                        </span>
+                        {session.useLocalMesh && (
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[10px] font-bold">
+                            Mesh Local
+                          </span>
+                        )}
+                      </div>
+
+                      <p className="text-xs text-slate-300 line-clamp-2 font-light">
+                        {session.description || session.presetContent?.description || 'Sin descripción.'}
+                      </p>
+
+                      <div className="bg-black/55 rounded-xl p-2.5 text-xs text-slate-300 flex flex-col gap-1 border border-white/10">
+                        <div className="flex justify-between items-center">
+                          <span>Frecuencias Activas:</span>
+                          <span className="text-white font-mono font-bold">{oscs.length}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span>Promedio Armónico:</span>
+                          <span className="text-cyan-300 font-mono font-bold">{avgFreq} Hz</span>
+                        </div>
+                      </div>
+
+                      <ParticleWaveformBand oscillators={oscs} isPlaying={isPreviewing} compact />
+
+                      {/* Collapsible Live Session Inspector */}
+                      <div className="rounded-xl bg-black/50 border border-white/10 overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => toggleExpandCard(`session-${session.id}`)}
+                          className="w-full px-3 py-2 flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-300 hover:text-purple-300 cursor-pointer"
+                        >
+                          <span className="flex items-center gap-1.5">
+                            <Icon name="Sliders" size={12} className="text-cyan-400" />
+                            Inspeccionar Frecuencias y Recomendación
+                          </span>
+                          <Icon name={isExpanded ? 'ChevronUp' : 'ChevronDown'} size={13} />
+                        </button>
+
+                        {isExpanded && (
+                          <div className="px-3 pb-3 pt-1.5 border-t border-white/5 space-y-2 text-[11px]">
+                            <div className="space-y-1 max-h-36 overflow-y-auto custom-scrollbar">
+                              {oscs.map((osc, i) => (
+                                <div
+                                  key={osc.id || i}
+                                  className="flex flex-wrap items-center justify-between gap-1 bg-white/[0.03] rounded-lg px-2 py-1 font-mono text-[10px] text-slate-200 border border-white/5"
+                                >
+                                  <span className="text-cyan-300 font-bold">{osc.frequency} Hz</span>
+                                  <span className="text-purple-300">{osc.type}</span>
+                                  <span className="text-emerald-300">{Math.round((osc.volume ?? 0.5) * 100)}%</span>
+                                  <span className="text-slate-400">Pan {Number(osc.panX ?? 0).toFixed(1)}</span>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="bg-purple-950/30 border border-purple-500/20 rounded-lg p-2 space-y-1">
+                              <span className="block text-[10px] font-bold text-purple-200">{tech.primaryMediumLabel}</span>
+                              <p className="text-[10px] text-slate-300">{tech.usageMode}</p>
+                              <div className="grid grid-cols-2 gap-1 text-[10px] font-mono text-slate-300 pt-1">
+                                <span>Vol: {tech.recommendedVolume}</span>
+                                <span>V: {tech.recommendedVoltage || '1.2–12V'}</span>
+                                <span>W: {tech.recommendedWatts || '0.5–5W'}</span>
+                                <span>{tech.frequencyScales.opticalNm || '—'}</span>
+                              </div>
                             </div>
                           </div>
+                        )}
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-3 text-[10px] text-slate-400 bg-black/45 px-3 py-1.5 rounded-full border border-white/10 justify-between">
+                        <span className="flex items-center gap-1">
+                          <Icon name="Users" size={12} className="text-fuchsia-400" />
+                          {session.participantsCount || 1} Mentes
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Icon
+                            name={session.allowOpenModifications ? 'Unlock' : 'Lock'}
+                            size={12}
+                            className={session.allowOpenModifications ? 'text-green-400' : 'text-red-400'}
+                          />
+                          {session.allowOpenModifications ? 'Abierto' : 'Solo Host'}
+                        </span>
+                        {session.fixedPermissions && (
+                          <span className="flex items-center gap-1 text-amber-400" title="Host Persistente">
+                            <Icon name="Anchor" size={12} /> Fijo
+                          </span>
+                        )}
+                      </div>
+
+                      {isOwn && (
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openEditSessionModal(session)}
+                            className="flex-1 py-1.5 px-3 bg-amber-500/15 hover:bg-amber-500/30 border border-amber-500/30 text-amber-200 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+                          >
+                            <Icon name="Edit3" size={12} /> Editar Sala
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSession(session)}
+                            className="py-1.5 px-3 bg-red-500/15 hover:bg-red-500/30 border border-red-500/30 text-red-300 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer"
+                          >
+                            <Icon name="Trash2" size={12} /> Finalizar
+                          </button>
                         </div>
                       )}
-                    </div>
 
-                    <div className="flex flex-wrap items-center gap-3 text-[10px] text-slate-400 bg-black/45 px-3 py-1.5 rounded-full border border-white/10 justify-between">
-                      <span className="flex items-center gap-1">
-                        <Icon name="Users" size={12} className="text-fuchsia-400" />
-                        {session.participantsCount || 1} Mentes
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Icon
-                          name={session.allowOpenModifications ? 'Unlock' : 'Lock'}
-                          size={12}
-                          className={session.allowOpenModifications ? 'text-green-400' : 'text-red-400'}
-                        />
-                        {session.allowOpenModifications ? 'Abierto' : 'Solo Host'}
-                      </span>
-                      {session.fixedPermissions && (
-                        <span className="flex items-center gap-1 text-amber-400" title="Host Persistente">
-                          <Icon name="Anchor" size={12} /> Fijo
-                        </span>
-                      )}
-                    </div>
-
-                    {isOwn && (
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex gap-2">
                         <button
                           type="button"
-                          onClick={() => openEditSessionModal(session)}
-                          className="flex-1 py-1.5 px-3 bg-amber-500/15 hover:bg-amber-500/30 border border-amber-500/30 text-amber-200 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+                          onClick={() => togglePreview(`session-${session.id}`, oscs)}
+                          className={`p-2.5 rounded-xl border transition-colors flex items-center justify-center shrink-0 cursor-pointer ${
+                            isPreviewing
+                              ? 'bg-cyan-500/25 border-cyan-400 text-cyan-200'
+                              : 'bg-black/50 border-white/10 hover:border-white/25 text-slate-300 hover:text-white'
+                          }`}
+                          title={isPreviewing ? 'Detener pre-escucha' : 'Pre-escuchar sonido'}
                         >
-                          <Icon name="Edit3" size={12} /> Editar Sala
+                          <Icon name={isPreviewing ? 'Square' : 'Play'} size={15} />
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleDeleteSession(session)}
-                          className="py-1.5 px-3 bg-red-500/15 hover:bg-red-500/30 border border-red-500/30 text-red-300 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer"
+                          onClick={() => {
+                            stopPreview();
+                            onJoinSession(session);
+                          }}
+                          className="flex-1 py-2.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl font-bold text-xs uppercase tracking-wider transition-all shadow-[0_0_15px_rgba(168,85,247,0.4)] flex items-center justify-center gap-2 cursor-pointer"
                         >
-                          <Icon name="Trash2" size={12} /> Finalizar
+                          <Icon name="Headphones" size={15} /> {isOwn ? 'Entrar como Host' : 'Sincronizar'}
                         </button>
                       </div>
-                    )}
-
-                    <div className="flex gap-2 mt-auto">
-                      <button
-                        type="button"
-                        onClick={() => togglePreview(`session-${session.id}`, oscs)}
-                        className={`p-2.5 rounded-xl border transition-colors flex items-center justify-center shrink-0 cursor-pointer ${
-                          isPreviewing
-                            ? 'bg-cyan-500/25 border-cyan-400 text-cyan-200'
-                            : 'bg-black/50 border-white/10 hover:border-white/25 text-slate-300 hover:text-white'
-                        }`}
-                        title={isPreviewing ? 'Detener pre-escucha' : 'Pre-escuchar sonido'}
-                      >
-                        <Icon name={isPreviewing ? 'Square' : 'Play'} size={15} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          stopPreview();
-                          onJoinSession(session);
-                        }}
-                        className="flex-1 py-2.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl font-bold text-xs uppercase tracking-wider transition-all shadow-[0_0_15px_rgba(168,85,247,0.4)] flex items-center justify-center gap-2 cursor-pointer"
-                      >
-                        <Icon name="Headphones" size={15} /> {isOwn ? 'Entrar como Host' : 'Sincronizar'}
-                      </button>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-
-            {sortedSessions.length === 0 && (
-              <div className="col-span-full py-16 text-center text-slate-500 border border-dashed border-white/10 rounded-2xl">
-                <Icon name="MicOff" size={32} className="mx-auto mb-3 opacity-40" />
-                <p className="mb-1 text-white/70">No hay sintonizaciones activas.</p>
-                <p className="text-xs">Inicia una sesión local o global y transmite al universo cuántico.</p>
-              </div>
-            )}
-          </div>
+                );
+              }}
+            />
+          )}
         </div>
       )}
 

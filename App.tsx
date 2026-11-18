@@ -12,6 +12,7 @@ import {
   PresetContent
 } from './types';
 import FrequencyCard from './components/FrequencyCard';
+import AdaptiveParticleGrid from './components/AdaptiveParticleGrid';
 import Icon from './components/Icon';
 import { useAudio } from './hooks/useAudio';
 import Generator from './components/Generator';
@@ -656,17 +657,21 @@ const App: React.FC = () => {
 
                 {/* --- Results Grid --- */}
                 {filteredData.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 pb-36">
-                    {filteredData.map((item, index) => (
+                  <AdaptiveParticleGrid<FrequencyItem>
+                    items={filteredData}
+                    getItemKey={(item) => item.id}
+                    columnsConfig={{ base: 1, md: 2, xl: 3 }}
+                    gapPx={24}
+                    className="pb-36"
+                    renderItem={(item, index) => (
                       <FrequencyCard
-                        key={item.id}
                         item={item}
                         delay={Math.min(index, 12) * 35}
                         onAddToPlayer={handleAddToPlayer}
                         oscillatorsList={getParticleOscillators(item)}
                       />
-                    ))}
-                  </div>
+                    )}
+                  />
                 ) : (
                   <div className="flex flex-col items-center justify-center py-24 text-center text-slate-400 bg-black/40 border border-white/10 rounded-3xl animate-fade-in mb-28">
                     <Icon name="Activity" size={56} className="mb-4 opacity-30 text-cyan-400" />

@@ -19,6 +19,8 @@ import {
   exportPresetToOSLibrary,
   importPresetsFromOSLibrary
 } from '../services/starseedAuth';
+import ParticleWaveformBand from './ParticleWaveformBand';
+import AdaptiveParticleGrid from './AdaptiveParticleGrid';
 
 interface Props {
   mode: 'save' | 'load';
@@ -386,6 +388,355 @@ const FileExplorer: React.FC<Props> = ({ mode, onFileSelect, onClose, fs, curren
     }
   };
 
+  const renderExplorerNodeCard = (node: FileSystemNode, pathLabel: string) => {
+    if (node.type === 'folder') {
+      return (
+        <div
+          key={node.id}
+          onClick={() => setCurrentFolderId(node.id)}
+          className="group cursor-pointer rounded-2xl border bg-black/45 border-white/10 hover:border-amber-400/40 hover:bg-black/65 transition-all p-4 flex items-center justify-between gap-3 h-fit"
+        >
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <div className="w-11 h-11 rounded-xl bg-amber-950/40 text-amber-400 border border-amber-500/30 flex items-center justify-center shrink-0">
+              <Icon name="FolderOpen" size={22} />
+            </div>
+            <div className="min-w-0 flex-1">
+              {renamingNodeId === node.id ? (
+                <input
+                  autoFocus
+                  type="text"
+                  value={renamingName}
+                  onChange={e => setRenamingName(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      if (renamingName.trim()) fs.renameNode(node.id, renamingName.trim());
+                      setRenamingNodeId(null);
+                    } else if (e.key === 'Escape') {
+                      setRenamingNodeId(null);
+                    }
+                  }}
+                  onBlur={() => {
+                    if (renamingName.trim()) fs.renameNode(node.id, renamingName.trim());
+                    setRenamingNodeId(null);
+                  }}
+                  onClick={e => e.stopPropagation()}
+                  className="w-full bg-black/80 border border-cyan-500/50 text-white text-xs font-bold rounded-lg px-2 py-1 focus:outline-none"
+                />
+              ) : (
+                <>
+                  <h4 className="font-bold text-sm text-white truncate">{node.name}</h4>
+                  <span className="text-[10px] text-slate-400">
+                    {node.children?.length || 0} elementos
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => {
+                setRenamingNodeId(node.id);
+                setRenamingName(node.name);
+              }}
+              className="p-1.5 rounded-lg bg-white/5 hover:bg-cyan-500/20 text-slate-300 hover:text-cyan-200 cursor-pointer"
+              title="Renombrar carpeta"
+            >
+              <Icon name="Edit2" size={13} />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMovingNode(node);
+                setMoveTargetFolderId(node.parentId || 'root');
+              }}
+              className="p-1.5 rounded-lg bg-white/5 hover:bg-purple-500/20 text-slate-300 hover:text-purple-200 cursor-pointer"
+              title="Mover carpeta"
+            >
+              <Icon name="Move" size={13} />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (confirm(`¿Eliminar la carpeta "${node.name}" y todo su contenido?`)) {
+                  fs.deleteNode(node.id);
+                }
+              }}
+              className="p-1.5 rounded-lg bg-white/5 hover:bg-red-500/25 text-slate-300 hover:text-red-300 cursor-pointer"
+              title="Eliminar carpeta"
+            >
+              <Icon name="Trash2" size={13} />
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    const oscs = node.content?.oscillators || [];
+    const catInfo = CATEGORIES.find(c => c.id === node.content?.category);
+    const tech =
+      node.content?.technicalRecommendation ||
+      autoSuggestTechnicalRecommendation(oscs, node.content?.category, node.name);
+    const mediumBadges = tech.recommendedMediums
+      .map(id => RADIATION_MEDIUMS.find(m => m.id === id))
+      .filter((m): m is (typeof RADIATION_MEDIUMS)[number] => Boolean(m));
+    const isSelected = selectedId === node.id;
+    const isInspected = !!expandedInspectorIds[node.id];
+
+    return (
+      <div
+        key={node.id}
+        onClick={() => setSelectedId(node.id)}
+        onDoubleClick={() => {
+          if (node.content && mode === 'load') {
+            onFileSelect(node.content, false);
+            onClose();
+          }
+        }}
+        className={`rounded-2xl border p-4 transition-all flex flex-col h-fit gap-3 cursor-pointer ${
+          isSelected
+            ? 'bg-cyan-950/35 border-cyan-400/60 shadow-[0_0_24px_rgba(34,211,238,0.18)]'
+            : 'bg-black/45 border-white/10 hover:border-white/25 hover:bg-black/60'
+        }`}
+      >
+        {/* Card Header */}
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-start gap-2.5 min-w-0 flex-1">
+            <div className="p-2 rounded-xl bg-purple-950/40 text-purple-300 border border-purple-500/25 shrink-0">
+              <Icon name="FileAudio" size={16} />
+            </div>
+            <div className="min-w-0 flex-1">
+              {renamingNodeId === node.id ? (
+                <input
+                  autoFocus
+                  type="text"
+                  value={renamingName}
+                  onChange={e => setRenamingName(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      if (renamingName.trim()) fs.renameNode(node.id, renamingName.trim());
+                      setRenamingNodeId(null);
+                    } else if (e.key === 'Escape') {
+                      setRenamingNodeId(null);
+                    }
+                  }}
+                  onBlur={() => {
+                    if (renamingName.trim()) fs.renameNode(node.id, renamingName.trim());
+                    setRenamingNodeId(null);
+                  }}
+                  onClick={e => e.stopPropagation()}
+                  className="w-full bg-black/80 border border-cyan-500/50 text-white text-xs font-bold rounded-lg px-2 py-1 focus:outline-none"
+                />
+              ) : (
+                <h4 className="font-bold text-white text-sm truncate">{node.name}</h4>
+              )}
+              <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                <span
+                  className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/5 border border-white/10 ${
+                    catInfo?.color || 'text-cyan-300'
+                  }`}
+                >
+                  <Icon name={catInfo?.iconName || 'Layers'} size={10} />
+                  {catInfo?.label || node.content?.category || 'Sinergia'}
+                </span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-white/5 text-slate-300 border border-white/10">
+                  {oscs.length} Osc
+                </span>
+                {pathLabel && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-200 border border-amber-500/20">
+                    {pathLabel}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Real Synthesized Waveform Band */}
+        <ParticleWaveformBand oscillators={oscs} compact />
+
+        {/* Description */}
+        <p className="text-xs text-slate-300 line-clamp-2 font-light">
+          {node.content?.description || 'Sin descripción'}
+        </p>
+
+        {/* Radiation Medium Badges */}
+        <div className="flex flex-wrap gap-1">
+          {mediumBadges.map(m => (
+            <span
+              key={m.id}
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-bold ${m.badgeClass}`}
+            >
+              <Icon name={m.iconName} size={9} />
+              {m.shortLabel}
+            </span>
+          ))}
+        </div>
+
+        {/* Integrated Collapsible Inspector */}
+        <div
+          className="rounded-xl bg-black/50 border border-white/10 overflow-hidden"
+          onClick={e => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            onClick={() => toggleInspector(node.id)}
+            className="w-full px-3 py-2 flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-300 hover:text-cyan-300 cursor-pointer"
+          >
+            <span className="flex items-center gap-1.5">
+              <Icon name="Sliders" size={12} className="text-cyan-400" />
+              Frecuencias y Recomendación ({oscs.length})
+            </span>
+            <Icon name={isInspected ? 'ChevronUp' : 'ChevronDown'} size={13} />
+          </button>
+
+          {isInspected && (
+            <div className="px-3 pb-3 pt-1 space-y-2 border-t border-white/5 text-[11px]">
+              <div className="bg-cyan-950/30 border border-cyan-500/20 rounded-lg p-2">
+                <span className="block text-[9px] uppercase font-bold text-cyan-300">
+                  {tech.primaryMediumLabel}
+                </span>
+                <p className="text-slate-300 text-[10px] mt-0.5">{tech.usageMode}</p>
+                <div className="grid grid-cols-2 gap-1 mt-1.5 text-[10px] font-mono text-slate-300">
+                  <span>Vol: {tech.recommendedVolume}</span>
+                  <span>{tech.recommendedVoltage || '1.2–12V'}</span>
+                  <span>{tech.frequencyScales.khz || '—'}</span>
+                  <span>{tech.frequencyScales.opticalNm || '—'}</span>
+                </div>
+              </div>
+
+              <div className="space-y-1 max-h-40 overflow-y-auto custom-scrollbar">
+                {oscs.map((osc, i) => (
+                  <div
+                    key={osc.id || i}
+                    className="flex flex-wrap items-center justify-between gap-1 bg-white/[0.03] rounded-lg px-2 py-1.5 font-mono text-[10px] text-slate-200 border border-white/5"
+                  >
+                    <span className="font-bold text-cyan-300">
+                      {osc.frequency} Hz
+                    </span>
+                    <span className="text-purple-300">{osc.type}</span>
+                    <span className="text-emerald-300">
+                      {Math.round((osc.volume ?? 0.5) * 100)}%
+                    </span>
+                    <span className="text-slate-400">
+                      Pan({Number(osc.panX ?? 0).toFixed(1)}, {Number(osc.panY ?? 0).toFixed(1)}, {Number(osc.panZ ?? 0).toFixed(1)})
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Action Toolbar */}
+        <div
+          className="flex flex-wrap items-center justify-between gap-1.5 pt-2 border-t border-white/10"
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="flex flex-wrap items-center gap-1">
+            <button
+              type="button"
+              onClick={() => openParticleEditor(node)}
+              className="px-2 py-1.5 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/30 text-cyan-200 border border-cyan-500/30 text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+              title="Editar partícula completa (frecuencias, categoría y recomendación)"
+            >
+              <Icon name="Edit3" size={12} />
+              Editar
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const newId = fs.duplicateNode(node.id);
+                if (newId) notify('success', `Partícula "${node.name}" duplicada.`);
+              }}
+              className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-slate-300 hover:text-white cursor-pointer"
+              title="Duplicar"
+            >
+              <Icon name="Copy" size={12} />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMovingNode(node);
+                setMoveTargetFolderId(node.parentId || 'root');
+              }}
+              className="p-1.5 rounded-lg bg-white/5 hover:bg-purple-500/20 text-slate-300 hover:text-purple-200 cursor-pointer"
+              title="Mover a carpeta"
+            >
+              <Icon name="Move" size={12} />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleExportOS(node)}
+              className="p-1.5 rounded-lg bg-white/5 hover:bg-amber-500/25 text-slate-300 hover:text-amber-200 cursor-pointer"
+              title="Exportar a Starseed OS"
+            >
+              <Icon name="Cloud" size={12} />
+            </button>
+            <button
+              type="button"
+              onClick={() => openPublishConfirm(node)}
+              className="p-1.5 rounded-lg bg-white/5 hover:bg-cyan-500/25 text-slate-300 hover:text-cyan-200 cursor-pointer"
+              title="Publicar en Comunidad (Vibras)"
+            >
+              <Icon name="Globe" size={12} />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setRenamingNodeId(node.id);
+                setRenamingName(node.name);
+              }}
+              className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-slate-300 hover:text-white cursor-pointer"
+              title="Renombrar"
+            >
+              <Icon name="Edit2" size={12} />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (confirm(`¿Borrar la partícula "${node.name}"?`)) {
+                  fs.deleteNode(node.id);
+                  if (selectedId === node.id) setSelectedId(null);
+                }
+              }}
+              className="p-1.5 rounded-lg bg-white/5 hover:bg-red-500/25 text-slate-300 hover:text-red-300 cursor-pointer"
+              title="Eliminar"
+            >
+              <Icon name="Trash2" size={12} />
+            </button>
+          </div>
+
+          {mode === 'load' && node.content && (
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => {
+                  onFileSelect(node.content!, true);
+                  onClose();
+                }}
+                className="px-2.5 py-1.5 rounded-lg bg-purple-500/20 hover:bg-purple-500/40 text-purple-200 border border-purple-500/30 text-[10px] font-bold cursor-pointer"
+              >
+                + Mezclar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onFileSelect(node.content!, false);
+                  onClose();
+                }}
+                className="px-2.5 py-1.5 rounded-lg bg-cyan-500/25 hover:bg-cyan-500 text-cyan-100 hover:text-black border border-cyan-500/40 text-[10px] font-bold cursor-pointer"
+              >
+                Cargar
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return createPortal(
     <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/90 backdrop-blur-xl p-2 sm:p-5 animate-fade-in">
       <div className="w-full max-w-6xl bg-[#060913]/95 border border-cyan-500/25 rounded-3xl shadow-[0_0_60px_rgba(0,0,0,0.95),inset_0_0_30px_rgba(34,211,238,0.06)] flex flex-col max-h-[94vh] sm:h-[90vh] overflow-hidden relative backdrop-blur-2xl">
@@ -601,360 +952,17 @@ const FileExplorer: React.FC<Props> = ({ mode, onFileSelect, onClose, fs, curren
                   : 'Importa desde StarSeed OS o guarda partículas desde el Generador.'}
               </p>
             </div>
+          ) : viewLayout === 'grid' ? (
+            <AdaptiveParticleGrid
+              items={displayedItems}
+              getItemKey={({ node }) => node.id}
+              columnsConfig={{ base: 1, sm: 2, lg: 3 }}
+              gapPx={16}
+              renderItem={({ node, pathLabel }) => renderExplorerNodeCard(node, pathLabel)}
+            />
           ) : (
-            <div
-              className={
-                viewLayout === 'grid'
-                  ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4'
-                  : 'flex flex-col gap-3'
-              }
-            >
-              {displayedItems.map(({ node, pathLabel }) => {
-                if (node.type === 'folder') {
-                  return (
-                    <div
-                      key={node.id}
-                      onClick={() => setCurrentFolderId(node.id)}
-                      className={`group cursor-pointer rounded-2xl border bg-black/45 border-white/10 hover:border-amber-400/40 hover:bg-black/65 transition-all p-4 flex items-center justify-between gap-3`}
-                    >
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <div className="w-11 h-11 rounded-xl bg-amber-950/40 text-amber-400 border border-amber-500/30 flex items-center justify-center shrink-0">
-                          <Icon name="FolderOpen" size={22} />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          {renamingNodeId === node.id ? (
-                            <input
-                              autoFocus
-                              type="text"
-                              value={renamingName}
-                              onChange={e => setRenamingName(e.target.value)}
-                              onKeyDown={e => {
-                                if (e.key === 'Enter') {
-                                  if (renamingName.trim()) fs.renameNode(node.id, renamingName.trim());
-                                  setRenamingNodeId(null);
-                                } else if (e.key === 'Escape') {
-                                  setRenamingNodeId(null);
-                                }
-                              }}
-                              onBlur={() => {
-                                if (renamingName.trim()) fs.renameNode(node.id, renamingName.trim());
-                                setRenamingNodeId(null);
-                              }}
-                              onClick={e => e.stopPropagation()}
-                              className="w-full bg-black/80 border border-cyan-500/50 text-white text-xs font-bold rounded-lg px-2 py-1 focus:outline-none"
-                            />
-                          ) : (
-                            <>
-                              <h4 className="font-bold text-sm text-white truncate">{node.name}</h4>
-                              <span className="text-[10px] text-slate-400">
-                                {node.children?.length || 0} elementos
-                              </span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setRenamingNodeId(node.id);
-                            setRenamingName(node.name);
-                          }}
-                          className="p-1.5 rounded-lg bg-white/5 hover:bg-cyan-500/20 text-slate-300 hover:text-cyan-200 cursor-pointer"
-                          title="Renombrar carpeta"
-                        >
-                          <Icon name="Edit2" size={13} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setMovingNode(node);
-                            setMoveTargetFolderId(node.parentId || 'root');
-                          }}
-                          className="p-1.5 rounded-lg bg-white/5 hover:bg-purple-500/20 text-slate-300 hover:text-purple-200 cursor-pointer"
-                          title="Mover carpeta"
-                        >
-                          <Icon name="Move" size={13} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (confirm(`¿Eliminar la carpeta "${node.name}" y todo su contenido?`)) {
-                              fs.deleteNode(node.id);
-                            }
-                          }}
-                          className="p-1.5 rounded-lg bg-white/5 hover:bg-red-500/25 text-slate-300 hover:text-red-300 cursor-pointer"
-                          title="Eliminar carpeta"
-                        >
-                          <Icon name="Trash2" size={13} />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                }
-
-                // File Card / Row
-                const oscs = node.content?.oscillators || [];
-                const catInfo = CATEGORIES.find(c => c.id === node.content?.category);
-                const tech =
-                  node.content?.technicalRecommendation ||
-                  autoSuggestTechnicalRecommendation(oscs, node.content?.category, node.name);
-                const mediumBadges = tech.recommendedMediums
-                  .map(id => RADIATION_MEDIUMS.find(m => m.id === id))
-                  .filter((m): m is (typeof RADIATION_MEDIUMS)[number] => Boolean(m));
-                const isSelected = selectedId === node.id;
-                const isInspected = !!expandedInspectorIds[node.id];
-
-                return (
-                  <div
-                    key={node.id}
-                    onClick={() => setSelectedId(node.id)}
-                    onDoubleClick={() => {
-                      if (node.content && mode === 'load') {
-                        onFileSelect(node.content, false);
-                        onClose();
-                      }
-                    }}
-                    className={`rounded-2xl border p-4 transition-all flex flex-col gap-3 cursor-pointer ${
-                      isSelected
-                        ? 'bg-cyan-950/35 border-cyan-400/60 shadow-[0_0_24px_rgba(34,211,238,0.18)]'
-                        : 'bg-black/45 border-white/10 hover:border-white/25 hover:bg-black/60'
-                    }`}
-                  >
-                    {/* Card Header */}
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-start gap-2.5 min-w-0 flex-1">
-                        <div className="p-2 rounded-xl bg-purple-950/40 text-purple-300 border border-purple-500/25 shrink-0">
-                          <Icon name="FileAudio" size={16} />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          {renamingNodeId === node.id ? (
-                            <input
-                              autoFocus
-                              type="text"
-                              value={renamingName}
-                              onChange={e => setRenamingName(e.target.value)}
-                              onKeyDown={e => {
-                                if (e.key === 'Enter') {
-                                  if (renamingName.trim()) fs.renameNode(node.id, renamingName.trim());
-                                  setRenamingNodeId(null);
-                                } else if (e.key === 'Escape') {
-                                  setRenamingNodeId(null);
-                                }
-                              }}
-                              onBlur={() => {
-                                if (renamingName.trim()) fs.renameNode(node.id, renamingName.trim());
-                                setRenamingNodeId(null);
-                              }}
-                              onClick={e => e.stopPropagation()}
-                              className="w-full bg-black/80 border border-cyan-500/50 text-white text-xs font-bold rounded-lg px-2 py-1 focus:outline-none"
-                            />
-                          ) : (
-                            <h4 className="font-bold text-white text-sm truncate">{node.name}</h4>
-                          )}
-                          <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                            <span
-                              className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/5 border border-white/10 ${
-                                catInfo?.color || 'text-cyan-300'
-                              }`}
-                            >
-                              <Icon name={catInfo?.iconName || 'Layers'} size={10} />
-                              {catInfo?.label || node.content?.category || 'Sinergia'}
-                            </span>
-                            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-white/5 text-slate-300 border border-white/10">
-                              {oscs.length} Osc
-                            </span>
-                            {pathLabel && (
-                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-200 border border-amber-500/20">
-                                {pathLabel}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Description */}
-                    <p className="text-xs text-slate-300 line-clamp-2 font-light">
-                      {node.content?.description || 'Sin descripción'}
-                    </p>
-
-                    {/* Radiation Medium Badges */}
-                    <div className="flex flex-wrap gap-1">
-                      {mediumBadges.map(m => (
-                        <span
-                          key={m.id}
-                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-bold ${m.badgeClass}`}
-                        >
-                          <Icon name={m.iconName} size={9} />
-                          {m.shortLabel}
-                        </span>
-                      ))}
-                    </div>
-
-                    {/* Integrated Collapsible Inspector */}
-                    <div
-                      className="rounded-xl bg-black/50 border border-white/10 overflow-hidden"
-                      onClick={e => e.stopPropagation()}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => toggleInspector(node.id)}
-                        className="w-full px-3 py-2 flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-300 hover:text-cyan-300 cursor-pointer"
-                      >
-                        <span className="flex items-center gap-1.5">
-                          <Icon name="Sliders" size={12} className="text-cyan-400" />
-                          Frecuencias y Recomendación ({oscs.length})
-                        </span>
-                        <Icon name={isInspected ? 'ChevronUp' : 'ChevronDown'} size={13} />
-                      </button>
-
-                      {isInspected && (
-                        <div className="px-3 pb-3 pt-1 space-y-2 border-t border-white/5 text-[11px]">
-                          <div className="bg-cyan-950/30 border border-cyan-500/20 rounded-lg p-2">
-                            <span className="block text-[9px] uppercase font-bold text-cyan-300">
-                              {tech.primaryMediumLabel}
-                            </span>
-                            <p className="text-slate-300 text-[10px] mt-0.5">{tech.usageMode}</p>
-                            <div className="grid grid-cols-2 gap-1 mt-1.5 text-[10px] font-mono text-slate-300">
-                              <span>Vol: {tech.recommendedVolume}</span>
-                              <span>{tech.recommendedVoltage || '1.2–12V'}</span>
-                              <span>{tech.frequencyScales.khz || '—'}</span>
-                              <span>{tech.frequencyScales.opticalNm || '—'}</span>
-                            </div>
-                          </div>
-
-                          <div className="space-y-1 max-h-40 overflow-y-auto custom-scrollbar">
-                            {oscs.map((osc, i) => (
-                              <div
-                                key={osc.id || i}
-                                className="flex flex-wrap items-center justify-between gap-1 bg-white/[0.03] rounded-lg px-2 py-1.5 font-mono text-[10px] text-slate-200 border border-white/5"
-                              >
-                                <span className="font-bold text-cyan-300">
-                                  {osc.frequency} Hz
-                                </span>
-                                <span className="text-purple-300">{osc.type}</span>
-                                <span className="text-emerald-300">
-                                  {Math.round((osc.volume ?? 0.5) * 100)}%
-                                </span>
-                                <span className="text-slate-400">
-                                  Pan({Number(osc.panX ?? 0).toFixed(1)}, {Number(osc.panY ?? 0).toFixed(1)}, {Number(osc.panZ ?? 0).toFixed(1)})
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Action Toolbar */}
-                    <div
-                      className="flex flex-wrap items-center justify-between gap-1.5 pt-2 border-t border-white/10 mt-auto"
-                      onClick={e => e.stopPropagation()}
-                    >
-                      <div className="flex flex-wrap items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => openParticleEditor(node)}
-                          className="px-2 py-1.5 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/30 text-cyan-200 border border-cyan-500/30 text-[10px] font-bold flex items-center gap-1 cursor-pointer"
-                          title="Editar partícula completa (frecuencias, categoría y recomendación)"
-                        >
-                          <Icon name="Edit3" size={12} />
-                          Editar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const newId = fs.duplicateNode(node.id);
-                            if (newId) notify('success', `Partícula "${node.name}" duplicada.`);
-                          }}
-                          className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-slate-300 hover:text-white cursor-pointer"
-                          title="Duplicar"
-                        >
-                          <Icon name="Copy" size={12} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setMovingNode(node);
-                            setMoveTargetFolderId(node.parentId || 'root');
-                          }}
-                          className="p-1.5 rounded-lg bg-white/5 hover:bg-purple-500/20 text-slate-300 hover:text-purple-200 cursor-pointer"
-                          title="Mover a carpeta"
-                        >
-                          <Icon name="Move" size={12} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleExportOS(node)}
-                          className="p-1.5 rounded-lg bg-white/5 hover:bg-amber-500/25 text-slate-300 hover:text-amber-200 cursor-pointer"
-                          title="Exportar a Starseed OS"
-                        >
-                          <Icon name="Cloud" size={12} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => openPublishConfirm(node)}
-                          className="p-1.5 rounded-lg bg-white/5 hover:bg-cyan-500/25 text-slate-300 hover:text-cyan-200 cursor-pointer"
-                          title="Publicar en Comunidad (Vibras)"
-                        >
-                          <Icon name="Globe" size={12} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setRenamingNodeId(node.id);
-                            setRenamingName(node.name);
-                          }}
-                          className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-slate-300 hover:text-white cursor-pointer"
-                          title="Renombrar"
-                        >
-                          <Icon name="Edit2" size={12} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (confirm(`¿Borrar la partícula "${node.name}"?`)) {
-                              fs.deleteNode(node.id);
-                              if (selectedId === node.id) setSelectedId(null);
-                            }
-                          }}
-                          className="p-1.5 rounded-lg bg-white/5 hover:bg-red-500/25 text-slate-300 hover:text-red-300 cursor-pointer"
-                          title="Eliminar"
-                        >
-                          <Icon name="Trash2" size={12} />
-                        </button>
-                      </div>
-
-                      {mode === 'load' && node.content && (
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              onFileSelect(node.content!, true);
-                              onClose();
-                            }}
-                            className="px-2.5 py-1.5 rounded-lg bg-purple-500/20 hover:bg-purple-500/40 text-purple-200 border border-purple-500/30 text-[10px] font-bold cursor-pointer"
-                          >
-                            + Mezclar
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              onFileSelect(node.content!, false);
-                              onClose();
-                            }}
-                            className="px-2.5 py-1.5 rounded-lg bg-cyan-500/25 hover:bg-cyan-500 text-cyan-100 hover:text-black border border-cyan-500/40 text-[10px] font-bold cursor-pointer"
-                          >
-                            Cargar
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="flex flex-col gap-3">
+              {displayedItems.map(({ node, pathLabel }) => renderExplorerNodeCard(node, pathLabel))}
             </div>
           )}
         </div>
