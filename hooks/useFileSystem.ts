@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { FileSystemNode, PresetContent } from '../types';
+import { FileSystemNode, OscillatorState, PresetContent } from '../types';
 import {
   getCurrentStarseedUser,
   normalizeOscillators,
@@ -39,6 +39,18 @@ const GUEST_STORAGE_KEY = 'omni_holographic_fs_local_device_v2';
 const accountBrainStorageKey = (uid: string, brainId: string) =>
   `omni_holographic_fs_account_${uid}_brain_${brainId}`;
 
+const guestAckStorageKey = (uid: string, brainId: string) =>
+  `omni_guest_import_ack_v1_${uid}_${brainId}`;
+
+export interface ActiveSourceNodeRef {
+  nodeId: string;
+  name: string;
+  folderPath: string;
+  brainId: string | null;
+  brainName: string | null;
+  originalSnapshotHash: string;
+}
+
 export interface SharedFileSystemStoreState {
   root: FileSystemNode;
   user: StarseedUser | null;
@@ -53,8 +65,118 @@ export interface SharedFileSystemStoreState {
   isLoadingBrains: boolean;
   hasLocalGuestData: boolean;
   localGuestStats: { folders: number; files: number };
+  localGuestSignature: string;
+  showLocalGuestImportPrompt: boolean;
   localLocationMeta: LocalStorageLocationMeta | null;
+  activeSourceNode: ActiveSourceNodeRef | null;
 }
+
+const fnv1aHex = (input: string): string => {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+};
+
+export const computeLocalGuestSignature = (rootNode: FileSystemNode): string => {
+  const stats = countTreeStats(rootNode);
+  if (stats.folders === 0 && stats.files === 0) return 'empty';
+  const tokens: string[] = [];
+  const walk = (node: FileSystemNode, depth: number) => {
+    if (node.id !== 'root') {
+      tokens.push(
+        `${depth}:${node.type}:${node.name.trim()}:${node.createdAt || 0}:${node.content?.updatedAt || 0}:${node.content?.oscillators?.length || 0}`
+      );
+    }
+    const children = [...(node.children || [])].sort((a, b) =>
+      `${a.type}:${a.name}`.localeCompare(`${b.type}:${b.name}`)
+    );
+    children.forEach((child) => walk(child, depth + 1));
+  };
+  walk(rootNode, 0);
+  return `${stats.folders}:${stats.files}:${fnv1aHex(tokens.join('|'))}`;
+};
+
+export const computeOscillatorsSignature = (oscillators: Partial<OscillatorState>[]): string => {
+  const normalized = (oscillators || []).map((o) => ({
+    f: Number(Number(o.frequency || 0).toFixed(4)),
+    v: Number(Number(o.volume ?? 0.5).toFixed(4)),
+    t: o.type || 'sine',
+    t2: o.type2 || '',
+    tm: Number(Number(o.typeMix ?? 0).toFixed(3)),
+    px: Number(Number(o.panX ?? 0).toFixed(3)),
+    py: Number(Number(o.panY ?? 0).toFixed(3)),
+    pz: Number(Number(o.panZ ?? 0).toFixed(3)),
+    cv: Number(Number(o.crestValleyRatio ?? 1).toFixed(3)),
+    dc: Number(Number(o.dutyCycle ?? 0).toFixed(3)),
+    hd: Number(Number(o.harmonicDistortion ?? 0).toFixed(3)),
+    ph: Math.round(o.phaseOffset ?? 0),
+    ind: Boolean(o.isIndependent),
+    pl: o.isPlaying !== false,
+    n: (o.name || '').trim(),
+    tr: o.transition?.enabled
+      ? {
+          s: Number(o.transition.start?.frequency || 0),
+          e: Number(o.transition.end?.frequency || 0),
+          d: Number(o.transition.duration || 0),
+        }
+      : null,
+  }));
+  return fnv1aHex(JSON.stringify(normalized));
+};
+
+export const resolveNodeFolderPath = (nodeId: string, root: FileSystemNode): string => {
+  const findPath = (curr: FileSystemNode, trail: string[]): string[] | null => {
+    if (curr.id === nodeId) return trail;
+    if (curr.children) {
+      const nextTrail = curr.id === 'root' ? trail : [...trail, curr.name];
+      for (const child of curr.children) {
+        const res = findPath(child, nextTrail);
+        if (res) return res;
+      }
+    }
+    return null;
+  };
+  const path = findPath(root, []);
+  if (!path || path.length === 0) return 'Raíz';
+  return path.join(' / ');
+};
+
+const evaluateGuestPromptState = (
+  user: StarseedUser | null,
+  brain: StarseedBrain | null,
+  canWrite: boolean,
+  guestRoot: FileSystemNode
+) => {
+  const stats = countTreeStats(guestRoot);
+  const hasLocalGuestData = stats.files > 0 || stats.folders > 0;
+  const sig = computeLocalGuestSignature(guestRoot);
+  let acked = false;
+  if (user && brain && hasLocalGuestData) {
+    try {
+      acked = localStorage.getItem(guestAckStorageKey(user.id, brain.id)) === sig;
+    } catch {
+      acked = false;
+    }
+  }
+  const showLocalGuestImportPrompt = Boolean(user && brain && canWrite && hasLocalGuestData && !acked);
+  return {
+    hasLocalGuestData,
+    localGuestStats: stats,
+    localGuestSignature: sig,
+    showLocalGuestImportPrompt,
+  };
+};
+
+const writeGuestImportAck = (uid: string, brainId: string, signature: string) => {
+  try {
+    localStorage.setItem(guestAckStorageKey(uid, brainId), signature);
+  } catch {
+    // Ignore storage errors
+  }
+};
 
 const loadGuestRootFromStorage = (): FileSystemNode => {
   try {
@@ -132,6 +254,7 @@ const cloneSubtreeWithNewIds = (node: FileSystemNode, newParentId: string | null
 
 const initialGuestRoot = loadGuestRootFromStorage();
 const initialGuestStats = countTreeStats(initialGuestRoot);
+const initialGuestSignature = computeLocalGuestSignature(initialGuestRoot);
 
 let storeState: SharedFileSystemStoreState = {
   root: initialGuestRoot,
@@ -147,13 +270,18 @@ let storeState: SharedFileSystemStoreState = {
   isLoadingBrains: false,
   hasLocalGuestData: initialGuestStats.files > 0 || initialGuestStats.folders > 0,
   localGuestStats: initialGuestStats,
+  localGuestSignature: initialGuestSignature,
+  showLocalGuestImportPrompt: false,
   localLocationMeta: getLocalStorageMeta(),
+  activeSourceNode: null,
 };
 
 const subscribers = new Set<(state: SharedFileSystemStoreState) => void>();
 let syncDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 let realtimeChannel: any = null;
 let initializedStore = false;
+let authTransitionSeq = 0;
+let isFetchingBrainsForUid: string | null = null;
 
 const emitState = () => {
   subscribers.forEach((cb) => {
@@ -172,11 +300,13 @@ const setStoreState = (patch: Partial<SharedFileSystemStoreState>) => {
 
 const refreshGuestStatsInStore = () => {
   const guest = loadGuestRootFromStorage();
-  const stats = countTreeStats(guest);
-  setStoreState({
-    localGuestStats: stats,
-    hasLocalGuestData: stats.files > 0 || stats.folders > 0,
-  });
+  const promptState = evaluateGuestPromptState(
+    storeState.user,
+    storeState.selectedBrain,
+    storeState.canWriteCurrentBrain,
+    guest
+  );
+  setStoreState(promptState);
 };
 
 const cleanupRealtimeSubscription = () => {
@@ -240,6 +370,12 @@ const activateBrainInStore = async (user: StarseedUser, brain: StarseedBrain) =>
   }
 
   const writable = canWriteBrain(brain);
+  const promptState = evaluateGuestPromptState(user, brain, writable, loadGuestRootFromStorage());
+  const keepActiveSource =
+    storeState.activeSourceNode &&
+    storeState.activeSourceNode.brainId === brain.id &&
+    Boolean(findNodeRecursive(storeState.activeSourceNode.nodeId, initialRoot));
+
   setStoreState({
     root: initialRoot,
     selectedBrainId: brain.id,
@@ -247,6 +383,8 @@ const activateBrainInStore = async (user: StarseedUser, brain: StarseedBrain) =>
     canWriteCurrentBrain: writable,
     syncState: storeState.isOnline ? 'syncing' : writable ? 'offline_queued' : 'read_only',
     syncMessage: `Sincronizando cerebro "${brain.name}"...`,
+    activeSourceNode: keepActiveSource ? storeState.activeSourceNode : null,
+    ...promptState,
   });
 
   persistBrainSelection(user, brain.id).catch(() => {});
@@ -299,9 +437,15 @@ const activateBrainInStore = async (user: StarseedUser, brain: StarseedBrain) =>
 
 const handleAuthTransition = async (user: StarseedUser | null) => {
   if (!user) {
+    authTransitionSeq += 1;
+    isFetchingBrainsForUid = null;
     cleanupRealtimeSubscription();
     const guestRoot = loadGuestRootFromStorage();
-    const stats = countTreeStats(guestRoot);
+    const promptState = evaluateGuestPromptState(null, null, true, guestRoot);
+    const keepGuestSource =
+      storeState.activeSourceNode &&
+      storeState.activeSourceNode.brainId === null &&
+      Boolean(findNodeRecursive(storeState.activeSourceNode.nodeId, guestRoot));
     setStoreState({
       user: null,
       brains: [],
@@ -314,36 +458,55 @@ const handleAuthTransition = async (user: StarseedUser | null) => {
         ? `Guardado automático local: ${storeState.localLocationMeta.label}`
         : 'Modo local del dispositivo (sin sesión StarSeed OS)',
       isLoadingBrains: false,
-      hasLocalGuestData: stats.files > 0 || stats.folders > 0,
-      localGuestStats: stats,
+      activeSourceNode: keepGuestSource ? storeState.activeSourceNode : null,
+      ...promptState,
     });
     return;
   }
 
+  // Deduplicate simultaneous auth events (getSession + INITIAL_SESSION + SIGNED_IN) for the same user
+  if (
+    storeState.user?.id === user.id &&
+    (storeState.brains.length > 0 || isFetchingBrainsForUid === user.id)
+  ) {
+    setStoreState({ user });
+    return;
+  }
+
+  const mySeq = ++authTransitionSeq;
+  isFetchingBrainsForUid = user.id;
+
   // Reset immediately to EMPTY account root while resolving brains so guest items never bleed into view!
+  const guestPrompt = evaluateGuestPromptState(user, null, true, loadGuestRootFromStorage());
   setStoreState({
     user,
     root: getEmptyRootNode('Cargando Cerebro StarSeed OS...'),
     isLoadingBrains: true,
     syncState: 'syncing',
     syncMessage: 'Conectando con tus Cerebros de StarSeed OS...',
+    activeSourceNode: null,
+    ...guestPrompt,
   });
 
-  refreshGuestStatsInStore();
+  try {
+    const res = await fetchUserBrains(user);
+    if (mySeq !== authTransitionSeq || storeState.user?.id !== user.id) return;
 
-  const res = await fetchUserBrains(user);
-  if (storeState.user?.id !== user.id) return;
+    const chosen = res.brains.find((b) => b.id === res.selectedBrainId) || res.brains[0] || null;
+    setStoreState({
+      brains: res.brains,
+      selectedBrainId: chosen?.id || null,
+      selectedBrain: chosen,
+      isLoadingBrains: false,
+    });
 
-  const chosen = res.brains.find((b) => b.id === res.selectedBrainId) || res.brains[0] || null;
-  setStoreState({
-    brains: res.brains,
-    selectedBrainId: chosen?.id || null,
-    selectedBrain: chosen,
-    isLoadingBrains: false,
-  });
-
-  if (chosen) {
-    await activateBrainInStore(user, chosen);
+    if (chosen) {
+      await activateBrainInStore(user, chosen);
+    }
+  } finally {
+    if (isFetchingBrainsForUid === user.id) {
+      isFetchingBrainsForUid = null;
+    }
   }
 };
 
@@ -388,11 +551,10 @@ const persistAndSyncRoot = (nextRoot: FileSystemNode) => {
   } else {
     // Guest / local device mode
     saveGuestRootToStorage(nextRoot);
-    const stats = countTreeStats(nextRoot);
+    const promptState = evaluateGuestPromptState(null, null, true, nextRoot);
     setStoreState({
       root: nextRoot,
-      hasLocalGuestData: stats.files > 0 || stats.folders > 0,
-      localGuestStats: stats,
+      ...promptState,
       syncState: 'local_only',
       syncMessage: localLocationMeta
         ? `Guardado localmente en "${localLocationMeta.label}"`
@@ -603,7 +765,14 @@ export const useFileSystem = () => {
         children: node.children.filter((c) => c.id !== id).map(removeRecursive),
       };
     };
-    persistAndSyncRoot(removeRecursive(storeState.root));
+    const nextRoot = removeRecursive(storeState.root);
+    persistAndSyncRoot(nextRoot);
+    if (
+      storeState.activeSourceNode &&
+      !findNodeRecursive(storeState.activeSourceNode.nodeId, nextRoot)
+    ) {
+      setStoreState({ activeSourceNode: null });
+    }
   };
 
   const renameNode = (id: string, newName: string) => {
@@ -622,9 +791,10 @@ export const useFileSystem = () => {
     updates: { name?: string; content?: PresetContent }
   ) => {
     if (!assertWritable()) return;
+    let updatedNodeSnapshot: FileSystemNode | null = null;
     const updateRecursive = (node: FileSystemNode): FileSystemNode => {
       if (node.id === id && node.type === 'file') {
-        return {
+        const nextNode: FileSystemNode = {
           ...node,
           name: updates.name !== undefined && updates.name.trim() ? updates.name.trim() : node.name,
           content: updates.content
@@ -636,11 +806,30 @@ export const useFileSystem = () => {
               }
             : node.content,
         };
+        updatedNodeSnapshot = nextNode;
+        return nextNode;
       }
       if (node.children) return { ...node, children: node.children.map(updateRecursive) };
       return node;
     };
-    persistAndSyncRoot(updateRecursive(storeState.root));
+    const nextRoot = updateRecursive(storeState.root);
+    persistAndSyncRoot(nextRoot);
+
+    if (
+      updatedNodeSnapshot &&
+      storeState.activeSourceNode &&
+      storeState.activeSourceNode.nodeId === id
+    ) {
+      const snap = updatedNodeSnapshot as FileSystemNode;
+      setStoreState({
+        activeSourceNode: {
+          ...storeState.activeSourceNode,
+          name: snap.name,
+          folderPath: resolveNodeFolderPath(id, nextRoot),
+          originalSnapshotHash: computeOscillatorsSignature(snap.content?.oscillators || []),
+        },
+      });
+    }
   };
 
   const duplicateNode = (id: string): string | null => {
@@ -854,10 +1043,98 @@ export const useFileSystem = () => {
     const stats = countTreeStats(guestRoot);
     if (stats.files === 0 && stats.folders === 0) return false;
 
+    const sig = computeLocalGuestSignature(guestRoot);
     const nextRoot =
       mode === 'replace' ? guestRoot : mergeFolderTreesPreservingAll(storeState.root, guestRoot);
+    if (storeState.user && storeState.selectedBrain) {
+      writeGuestImportAck(storeState.user.id, storeState.selectedBrain.id, sig);
+    }
+    setStoreState({
+      showLocalGuestImportPrompt: false,
+      localGuestSignature: sig,
+    });
     persistAndSyncRoot(nextRoot);
     return true;
+  };
+
+  const dismissLocalGuestImportPrompt = () => {
+    if (storeState.user && storeState.selectedBrain) {
+      const sig = computeLocalGuestSignature(loadGuestRootFromStorage());
+      writeGuestImportAck(storeState.user.id, storeState.selectedBrain.id, sig);
+      setStoreState({
+        showLocalGuestImportPrompt: false,
+        localGuestSignature: sig,
+      });
+    } else {
+      setStoreState({ showLocalGuestImportPrompt: false });
+    }
+  };
+
+  const setActiveSourceNode = (node: FileSystemNode | null) => {
+    if (!node || node.type !== 'file' || !node.content) {
+      setStoreState({ activeSourceNode: null });
+      return;
+    }
+    setStoreState({
+      activeSourceNode: {
+        nodeId: node.id,
+        name: node.name,
+        folderPath: resolveNodeFolderPath(node.id, storeState.root),
+        brainId: storeState.user ? storeState.selectedBrainId : null,
+        brainName: storeState.user ? storeState.selectedBrain?.name || null : null,
+        originalSnapshotHash: computeOscillatorsSignature(node.content.oscillators || []),
+      },
+    });
+  };
+
+  const isSourceModified = (currentOscillators: OscillatorState[]): boolean => {
+    if (!storeState.activeSourceNode) return false;
+    return computeOscillatorsSignature(currentOscillators) !== storeState.activeSourceNode.originalSnapshotHash;
+  };
+
+  const updateSourceNodeInPlace = (updates: {
+    content: Partial<PresetContent>;
+    name?: string;
+  }): { ok: boolean; updatedPath?: string; error?: string } => {
+    const ref = storeState.activeSourceNode;
+    if (!ref) {
+      return { ok: false, error: 'No hay ninguna partícula origen vinculada.' };
+    }
+    if (!assertWritable()) {
+      return { ok: false, error: 'El cerebro actual es de solo lectura.' };
+    }
+    if (storeState.user && ref.brainId && ref.brainId !== storeState.selectedBrainId) {
+      return {
+        ok: false,
+        error: `Cambia primero al cerebro "${ref.brainName || ref.brainId}" para actualizar el archivo origen.`,
+      };
+    }
+    const existing = findNodeRecursive(ref.nodeId, storeState.root);
+    if (!existing || existing.type !== 'file') {
+      setStoreState({ activeSourceNode: null });
+      return { ok: false, error: 'El archivo origen ya no existe en esta biblioteca.' };
+    }
+
+    const mergedContent: PresetContent = {
+      ...(existing.content || { oscillators: [], dateCreated: Date.now() }),
+      ...updates.content,
+      oscillators: normalizeOscillators(
+        updates.content.oscillators || existing.content?.oscillators || []
+      ),
+      updatedAt: Date.now(),
+    };
+
+    updateFileNode(ref.nodeId, {
+      name: updates.name,
+      content: mergedContent,
+    });
+
+    const folderPath = resolveNodeFolderPath(ref.nodeId, storeState.root);
+    const updatedName = updates.name?.trim() || existing.name;
+    return {
+      ok: true,
+      updatedPath: `${folderPath} / ${updatedName}`,
+    };
   };
 
   const chooseLocalDeviceLocation = async (mode: 'directory' | 'file') => {
@@ -942,7 +1219,10 @@ export const useFileSystem = () => {
     isLoadingBrains: state.isLoadingBrains,
     hasLocalGuestData: state.hasLocalGuestData,
     localGuestStats: state.localGuestStats,
+    localGuestSignature: state.localGuestSignature,
+    showLocalGuestImportPrompt: state.showLocalGuestImportPrompt,
     localLocationMeta: state.localLocationMeta,
+    activeSourceNode: state.activeSourceNode,
     createFolder,
     saveFile,
     saveFileWithPath,
@@ -959,6 +1239,10 @@ export const useFileSystem = () => {
     createBrain,
     syncNow,
     importLocalGuestDataToCurrentBrain,
+    dismissLocalGuestImportPrompt,
+    setActiveSourceNode,
+    isSourceModified,
+    updateSourceNodeInPlace,
     chooseLocalDeviceLocation,
     importFromRememberedLocalLocation,
     forgetLocalLocation,

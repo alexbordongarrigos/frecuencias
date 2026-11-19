@@ -191,13 +191,20 @@ export const logoutStarseed = async () => {
 };
 
 export const subscribeToStarseedAuth = (callback: (user: StarseedUser | null) => void) => {
-  const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-    if (session?.user) {
-      const user = await getCurrentStarseedUser();
-      callback(user);
-    } else {
-      callback(null);
-    }
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    // Defer DB reads out of the Supabase auth lock callback to prevent navigator.locks deadlock
+    setTimeout(async () => {
+      try {
+        if (session?.user) {
+          const user = await getCurrentStarseedUser();
+          callback(user);
+        } else {
+          callback(null);
+        }
+      } catch {
+        callback(null);
+      }
+    }, 0);
   });
 
   return () => {

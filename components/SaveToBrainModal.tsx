@@ -132,15 +132,15 @@ export const SaveToBrainModal: React.FC<Props> = ({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/85 backdrop-blur-xl p-4 animate-fade-in"
+      className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/85 backdrop-blur-xl p-2 sm:p-4 animate-fade-in"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg bg-[#080d1a] border border-cyan-500/35 rounded-3xl shadow-[0_0_55px_rgba(34,211,238,0.22)] overflow-hidden"
+        className="w-full max-w-lg max-h-[94dvh] overflow-y-auto custom-scrollbar bg-[#080d1a] border border-cyan-500/35 rounded-2xl sm:rounded-3xl shadow-[0_0_55px_rgba(34,211,238,0.22)]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/10 bg-black/40">
+        <div className="flex items-center justify-between px-4 sm:px-5 py-3 sm:py-4 border-b border-white/10 bg-black/40 sticky top-0 z-10 backdrop-blur-md">
           <div className="flex items-center gap-3 min-w-0">
             <div className="p-2.5 rounded-2xl bg-cyan-500/15 border border-cyan-400/35 text-cyan-300 shrink-0">
               <Icon name="FolderPlus" size={20} />
@@ -165,7 +165,7 @@ export const SaveToBrainModal: React.FC<Props> = ({
           </button>
         </div>
 
-        <form onSubmit={handleSave} className="p-5 space-y-4">
+        <form onSubmit={handleSave} className="p-3.5 sm:p-5 space-y-3 sm:space-y-4">
           {errorMsg && (
             <div className="px-3.5 py-2.5 rounded-xl bg-red-950/60 border border-red-500/40 text-xs text-red-200 flex items-center gap-2">
               <Icon name="AlertCircle" size={15} className="shrink-0" />

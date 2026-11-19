@@ -15,7 +15,18 @@ interface AudioNodeRefs {
   delay: DelayNode;
   panner: PannerNode;
   analyser: AnalyserNode;
+  isIndependent: boolean;
 }
+
+export type LiveAudioAdjustmentCommand =
+  | { type: 'harmonic_shift'; ratio?: number; deltaHz?: number; glideSec?: number }
+  | { type: 'update_layer'; index?: number; id?: string; changes: Partial<OscillatorState>; glideSec?: number }
+  | { type: 'add_layer'; oscillator: Partial<OscillatorState>; glideSec?: number }
+  | { type: 'remove_layer'; index?: number; id?: string; glideSec?: number }
+  | { type: 'set_master'; volume?: number; filter?: { type?: BiquadFilterType; frequency?: number; Q?: number } }
+  | { type: 'toggle_playback'; playing?: boolean }
+  | { type: 'set_spatial_spread'; spread: number; glideSec?: number }
+  | { type: 'launch_transition'; duration?: number; endShiftRatio?: number; loopCount?: number | 'infinite' };
 
 // Factor de escala para el espacio 3D.
 const SPATIAL_SCALE = 10.0;
@@ -68,9 +79,19 @@ export const useAudio = () => {
   
   const [isPlaying, setIsPlaying] = useState(false);
   const [oscillators, setOscillators] = useState<OscillatorState[]>([]);
+  const oscillatorsRef = useRef<OscillatorState[]>([]);
   const [masterVolume, setMasterVolume] = useState(1.0);
   const [masterFilter, setMasterFilter] = useState({ type: 'allpass' as BiquadFilterType, frequency: 20000, Q: 1 });
   const [meshLatency, setMeshLatency] = useState(0);
+
+  const commitOscillators = (
+    updater: OscillatorState[] | ((prev: OscillatorState[]) => OscillatorState[])
+  ): OscillatorState[] => {
+    const next = typeof updater === 'function' ? updater(oscillatorsRef.current) : updater;
+    oscillatorsRef.current = next;
+    setOscillators(next);
+    return next;
+  };
 
   useEffect(() => {
     const unsub = meshNetwork.onNodesUpdate((nodes) => {
@@ -254,13 +275,13 @@ export const useAudio = () => {
       color: initialState?.color || '#38bdf8' 
     };
 
-    setOscillators(prev => [...prev, newOsc]);
+    commitOscillators(prev => [...prev, newOsc]);
     createOscillatorNodes(newOsc);
     return newOsc.id;
   };
 
   const removeOscillator = (id: string) => {
-    setOscillators(prev => prev.filter(o => o.id !== id));
+    commitOscillators(prev => prev.filter(o => o.id !== id));
     destroyOscillatorNodes(id);
   };
 
@@ -294,7 +315,7 @@ export const useAudio = () => {
         createOscillatorNodes(osc);
       }
     });
-    setOscillators(compensatedList);
+    commitOscillators(compensatedList);
   };
 
   const updateOscillator = (id: string, changes: Partial<OscillatorState>) => {
@@ -302,7 +323,7 @@ export const useAudio = () => {
     if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
       audioCtxRef.current.resume();
     }
-    setOscillators(prev => prev.map(o => {
+    commitOscillators(prev => prev.map(o => {
       if (o.id === id) {
         const updated = { ...o, ...changes };
         updateOscillatorNodes(updated);
@@ -314,7 +335,7 @@ export const useAudio = () => {
 
   // --- Internal Audio Node Management ---
 
-  const createOscillatorNodes = (oscState: OscillatorState) => {
+  const createOscillatorNodes = (oscState: OscillatorState, fadeInTau = 0.035) => {
     if (!audioCtxRef.current || !masterGainRef.current || !combinedGainRef.current) return;
     const ctx = audioCtxRef.current;
 
@@ -364,14 +385,16 @@ export const useAudio = () => {
     osc1.type = oscState.type;
     osc2.type = oscState.type2 || oscState.type;
     
-    osc1.frequency.setValueAtTime(oscState.frequency, ctx.currentTime);
-    osc2.frequency.setValueAtTime(oscState.frequency, ctx.currentTime);
+    osc1.frequency.setValueAtTime(Math.max(0.1, Math.min(20000, oscState.frequency)), ctx.currentTime);
+    osc2.frequency.setValueAtTime(Math.max(0.1, Math.min(20000, oscState.frequency)), ctx.currentTime);
     
     const mix = oscState.typeMix || 0;
-    gain1.gain.setValueAtTime(1 - mix, ctx.currentTime);
-    gain2.gain.setValueAtTime(mix, ctx.currentTime);
+    gain1.gain.setValueAtTime(Math.cos(mix * 0.5 * Math.PI), ctx.currentTime);
+    gain2.gain.setValueAtTime(Math.sin(mix * 0.5 * Math.PI), ctx.currentTime);
     
-    mainGain.gain.setValueAtTime(oscState.volume, ctx.currentTime);
+    // Smooth clickless fade-in from near-zero
+    mainGain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    mainGain.gain.setTargetAtTime(oscState.isPlaying ? oscState.volume : 0, ctx.currentTime, fadeInTau);
     
     // Set 3D Position
     if (panner.positionX) {
@@ -402,42 +425,58 @@ export const useAudio = () => {
     osc1.start();
     osc2.start();
 
-    nodesRef.current.set(oscState.id, { osc1, osc2, gain1, gain2, mainGain, shaper, dcBlocker, aaFilter, delay, panner, analyser });
+    nodesRef.current.set(oscState.id, {
+      osc1,
+      osc2,
+      gain1,
+      gain2,
+      mainGain,
+      shaper,
+      dcBlocker,
+      aaFilter,
+      delay,
+      panner,
+      analyser,
+      isIndependent: Boolean(oscState.isIndependent),
+    });
   };
 
-  const destroyOscillatorNodes = (id: string) => {
+  const destroyOscillatorNodes = (id: string, fadeOutMs = 55) => {
     const nodes = nodesRef.current.get(id);
     if (nodes) {
+      nodesRef.current.delete(id);
       try {
           if (audioCtxRef.current) {
-            nodes.mainGain.gain.setTargetAtTime(0, audioCtxRef.current.currentTime, 0.01);
+            const tau = Math.max(0.01, fadeOutMs / 3000);
+            nodes.mainGain.gain.setTargetAtTime(0, audioCtxRef.current.currentTime, tau);
           }
           setTimeout(() => {
-              nodes.osc1.stop();
-              nodes.osc2.stop();
-              nodes.osc1.disconnect();
-              nodes.osc2.disconnect();
-              nodes.gain1.disconnect();
-              nodes.gain2.disconnect();
-              nodes.mainGain.disconnect();
-              nodes.shaper.disconnect();
-              nodes.dcBlocker.disconnect();
-              nodes.aaFilter.disconnect();
-              nodes.delay.disconnect();
-              nodes.panner.disconnect();
-              nodes.analyser.disconnect();
-          }, 50);
+              try {
+                nodes.osc1.stop();
+                nodes.osc2.stop();
+                nodes.osc1.disconnect();
+                nodes.osc2.disconnect();
+                nodes.gain1.disconnect();
+                nodes.gain2.disconnect();
+                nodes.mainGain.disconnect();
+                nodes.shaper.disconnect();
+                nodes.dcBlocker.disconnect();
+                nodes.aaFilter.disconnect();
+                nodes.delay.disconnect();
+                nodes.panner.disconnect();
+                nodes.analyser.disconnect();
+              } catch { /* already stopped */ }
+          }, fadeOutMs + 40);
       } catch(e) { console.error("Error disconnecting node", e)}
-      
-      nodesRef.current.delete(id);
     }
   };
 
-  const updateOscillatorNodes = (oscState: OscillatorState) => {
+  const updateOscillatorNodes = (oscState: OscillatorState, rampSec = 0.025) => {
     const nodes = nodesRef.current.get(oscState.id);
     if (!nodes || !audioCtxRef.current || !masterGainRef.current || !combinedGainRef.current) return;
     const ctx = audioCtxRef.current;
     const now = ctx.currentTime;
+    const tau = Math.max(0.012, rampSec);
 
     // Type
     if (nodes.osc1.type !== oscState.type) nodes.osc1.type = oscState.type;
@@ -453,38 +492,43 @@ export const useAudio = () => {
     // Angular Phase Shift Update (DelayNode)
     const phaseDeg = oscState.phaseOffset || 0;
     const delayTime = phaseDeg > 0 ? (phaseDeg / 360) / Math.max(0.1, oscState.frequency) : 0;
-    nodes.delay.delayTime.setTargetAtTime(delayTime, now, 0.02);
+    nodes.delay.delayTime.setTargetAtTime(delayTime, now, tau);
 
     // Crossfade Mix (Equal Power)
     const mix = oscState.typeMix || 0;
     const gain1Value = Math.cos(mix * 0.5 * Math.PI);
     const gain2Value = Math.sin(mix * 0.5 * Math.PI);
     
-    nodes.gain1.gain.setTargetAtTime(gain1Value, now, 0.02);
-    nodes.gain2.gain.setTargetAtTime(gain2Value, now, 0.02);
+    nodes.gain1.gain.setTargetAtTime(gain1Value, now, tau);
+    nodes.gain2.gain.setTargetAtTime(gain2Value, now, tau);
 
     // Freq & Vol
-    nodes.osc1.frequency.setTargetAtTime(oscState.frequency, now, 0.02);
-    nodes.osc2.frequency.setTargetAtTime(oscState.frequency, now, 0.02);
+    const clampedFreq = Math.max(0.1, Math.min(20000, oscState.frequency));
+    nodes.osc1.frequency.setTargetAtTime(clampedFreq, now, tau);
+    nodes.osc2.frequency.setTargetAtTime(clampedFreq, now, tau);
     
-    nodes.mainGain.gain.setTargetAtTime(oscState.isPlaying ? oscState.volume : 0, now, 0.02);
+    nodes.mainGain.gain.setTargetAtTime(oscState.isPlaying ? oscState.volume : 0, now, tau);
     
     // 3D Position
     if (nodes.panner.positionX) {
-      nodes.panner.positionX.setTargetAtTime(oscState.panX * SPATIAL_SCALE, now, 0.02);
-      nodes.panner.positionY.setTargetAtTime(oscState.panY * SPATIAL_SCALE, now, 0.02);
-      nodes.panner.positionZ.setTargetAtTime(oscState.panZ * -SPATIAL_SCALE, now, 0.02);
+      nodes.panner.positionX.setTargetAtTime(oscState.panX * SPATIAL_SCALE, now, tau);
+      nodes.panner.positionY.setTargetAtTime(oscState.panY * SPATIAL_SCALE, now, tau);
+      nodes.panner.positionZ.setTargetAtTime(oscState.panZ * -SPATIAL_SCALE, now, tau);
     }
 
-    // Routing update
-    try {
-        nodes.analyser.disconnect();
-        if (oscState.isIndependent) {
-            nodes.analyser.connect(masterGainRef.current);
-        } else {
-            nodes.analyser.connect(combinedGainRef.current);
-        }
-    } catch (e) { console.error("Routing update error", e); }
+    // Reconnect ONLY if independent routing actually changed (prevents micro-clicks during smooth modulation)
+    const wantIndependent = Boolean(oscState.isIndependent);
+    if (nodes.isIndependent !== wantIndependent) {
+      try {
+          nodes.analyser.disconnect();
+          if (wantIndependent) {
+              nodes.analyser.connect(masterGainRef.current);
+          } else {
+              nodes.analyser.connect(combinedGainRef.current);
+          }
+          nodes.isIndependent = wantIndependent;
+      } catch (e) { console.error("Routing update error", e); }
+    }
   };
 
   const getMasterAnalyser = () => masterAnalyserRef.current;
@@ -493,7 +537,7 @@ export const useAudio = () => {
 
   // Global Adjustments
   const setGlobalVolume = (vol: number) => {
-    setOscillators(prev => prev.map(o => {
+    commitOscillators(prev => prev.map(o => {
       const updated = { ...o, volume: vol };
       updateOscillatorNodes(updated);
       return updated;
@@ -501,7 +545,7 @@ export const useAudio = () => {
   };
 
   const centerAllPositions = () => {
-    setOscillators(prev => prev.map(o => {
+    commitOscillators(prev => prev.map(o => {
       const updated = { 
         ...o, 
         panX: 0, 
@@ -518,11 +562,233 @@ export const useAudio = () => {
   };
 
   const setGlobalWaveType = (type: WaveType) => {
-    setOscillators(prev => prev.map(o => {
+    commitOscillators(prev => prev.map(o => {
       const updated = { ...o, type };
       updateOscillatorNodes(updated);
       return updated;
     }));
+  };
+
+  const normalizeTargetOsc = (raw: Partial<OscillatorState>, idx: number): OscillatorState => ({
+    id: raw.id || crypto.randomUUID(),
+    frequency: Math.max(0.1, Math.min(20000, Number(raw.frequency) || 432)),
+    type: raw.type || 'sine',
+    volume: raw.volume !== undefined ? Math.max(0, Math.min(1, Number(raw.volume))) : 0.45,
+    panX: raw.panX ?? 0,
+    panY: raw.panY ?? 0,
+    panZ: raw.panZ ?? 0,
+    crestValleyRatio: raw.crestValleyRatio ?? 1.0,
+    dutyCycle: raw.dutyCycle ?? 0,
+    harmonicDistortion: raw.harmonicDistortion ?? 0,
+    phaseOffset: raw.phaseOffset ?? 0,
+    type2: raw.type2,
+    typeMix: raw.typeMix,
+    isPlaying: raw.isPlaying !== undefined ? raw.isPlaying : true,
+    name: raw.name || `Capa ${idx + 1}`,
+    isIndependent: Boolean(raw.isIndependent),
+    color: raw.color || '#38bdf8',
+    transition: raw.transition,
+  });
+
+  // Zero-interruption live oscillator morphing (smoothly glides frequencies, positions, gains)
+  const morphOscillatorsLive = (
+    incoming: Partial<OscillatorState>[],
+    options?: { mode?: 'morph' | 'blend' | 'replace'; glideSec?: number; autoPlay?: boolean }
+  ): OscillatorState[] => {
+    initAudio();
+    if (options?.autoPlay !== false && audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
+      audioCtxRef.current.resume().catch(() => {});
+    }
+
+    const mode = options?.mode || 'morph';
+    const glideSec = Math.max(0.08, Math.min(4.0, options?.glideSec ?? 0.65));
+    const tau = Math.max(0.03, glideSec / 3);
+    const current = oscillatorsRef.current;
+
+    if (mode === 'blend') {
+      const added = incoming.slice(0, Math.max(0, 21 - current.length)).map((o, i) =>
+        normalizeTargetOsc(o, current.length + i)
+      );
+      added.forEach((osc) => createOscillatorNodes(osc, tau));
+      const merged = [...current, ...added];
+      commitOscillators(merged);
+      return merged;
+    }
+
+    const nextList: OscillatorState[] = [];
+    const targetSlice = incoming.slice(0, 21);
+    const reuseCount = Math.min(current.length, targetSlice.length);
+
+    for (let i = 0; i < reuseCount; i++) {
+      const existing = current[i];
+      const normalized = normalizeTargetOsc(targetSlice[i], i);
+      const morphed: OscillatorState = {
+        ...normalized,
+        id: existing.id, // Reuse WebAudio AudioNodeRefs seamlessly without click!
+      };
+      if (nodesRef.current.has(morphed.id)) {
+        updateOscillatorNodes(morphed, tau);
+      } else {
+        createOscillatorNodes(morphed, tau);
+      }
+      nextList.push(morphed);
+    }
+
+    for (let i = reuseCount; i < targetSlice.length; i++) {
+      const added = normalizeTargetOsc(targetSlice[i], i);
+      createOscillatorNodes(added, tau);
+      nextList.push(added);
+    }
+
+    // Fade out surplus oscillators smoothly rather than hard-cutting them
+    const fadeOutMs = Math.round(glideSec * 1000) + 80;
+    for (let i = targetSlice.length; i < current.length; i++) {
+      destroyOscillatorNodes(current[i].id, fadeOutMs);
+    }
+
+    commitOscillators(nextList);
+    return nextList;
+  };
+
+  // Real-time uninterrupted adjustments dispatched by Cronos AI or live controls
+  const applyLiveAdjustment = async (cmd: LiveAudioAdjustmentCommand): Promise<string> => {
+    initAudio();
+    const glideSec = 'glideSec' in cmd && cmd.glideSec ? cmd.glideSec : 0.45;
+    const tau = Math.max(0.03, glideSec / 3);
+
+    switch (cmd.type) {
+      case 'toggle_playback': {
+        if (!audioCtxRef.current) return 'Audio no disponible.';
+        const wantPlay = cmd.playing !== undefined ? cmd.playing : audioCtxRef.current.state !== 'running';
+        if (wantPlay && audioCtxRef.current.state !== 'running') {
+          await audioCtxRef.current.resume();
+          setIsPlaying(true);
+          return 'Reproducción activada sin cortes.';
+        }
+        if (!wantPlay && audioCtxRef.current.state === 'running') {
+          await audioCtxRef.current.suspend();
+          setIsPlaying(false);
+          return 'Audio en pausa.';
+        }
+        return wantPlay ? 'Audio en curso.' : 'Audio ya pausado.';
+      }
+
+      case 'set_master': {
+        if (cmd.volume !== undefined) {
+          const v = Math.max(0, Math.min(1.5, Number(cmd.volume)));
+          setMasterVolume(v);
+          if (masterGainRef.current && audioCtxRef.current) {
+            masterGainRef.current.gain.setTargetAtTime(v, audioCtxRef.current.currentTime, 0.08);
+          }
+        }
+        if (cmd.filter) {
+          updateMasterFilter(cmd.filter);
+        }
+        return `Nivel maestro ajustado (${cmd.volume !== undefined ? `${Math.round(cmd.volume * 100)}%` : 'filtro'}).`;
+      }
+
+      case 'harmonic_shift': {
+        if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
+          await audioCtxRef.current.resume().catch(() => {});
+        }
+        const ratio = cmd.ratio && cmd.ratio > 0 ? cmd.ratio : 1;
+        const delta = cmd.deltaHz ?? 0;
+        commitOscillators(prev => prev.map(o => {
+          const nextFreq = Math.max(0.1, Math.min(20000, Number((o.frequency * ratio + delta).toFixed(3))));
+          const updated = { ...o, frequency: nextFreq };
+          updateOscillatorNodes(updated, tau);
+          return updated;
+        }));
+        return `Frecuencias moduladas en vivo (×${ratio.toFixed(4)}${delta ? ` +${delta}Hz` : ''}).`;
+      }
+
+      case 'update_layer': {
+        const list = oscillatorsRef.current;
+        const target =
+          (cmd.id && list.find(o => o.id === cmd.id)) ||
+          (cmd.index !== undefined ? list[cmd.index] : list[0]);
+        if (!target) return 'No hay oscilador destino.';
+        commitOscillators(prev => prev.map(o => {
+          if (o.id !== target.id) return o;
+          const updated = { ...o, ...cmd.changes };
+          updateOscillatorNodes(updated, tau);
+          return updated;
+        }));
+        return `Capa "${target.name}" actualizada en tiempo real.`;
+      }
+
+      case 'add_layer': {
+        if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
+          await audioCtxRef.current.resume().catch(() => {});
+        }
+        const layer = normalizeTargetOsc(cmd.oscillator, oscillatorsRef.current.length);
+        createOscillatorNodes(layer, tau);
+        commitOscillators(prev => [...prev, layer]);
+        return `Capa ${layer.frequency} Hz agregada suavemente.`;
+      }
+
+      case 'remove_layer': {
+        const list = oscillatorsRef.current;
+        const target =
+          (cmd.id && list.find(o => o.id === cmd.id)) ||
+          (cmd.index !== undefined ? list[cmd.index] : list[list.length - 1]);
+        if (!target) return 'No hay capa por retirar.';
+        commitOscillators(prev => prev.filter(o => o.id !== target.id));
+        destroyOscillatorNodes(target.id, Math.round(glideSec * 1000));
+        return `Capa "${target.name}" desvanecida limpiamente.`;
+      }
+
+      case 'set_spatial_spread': {
+        const spread = Math.max(0, Math.min(1, cmd.spread));
+        const list = oscillatorsRef.current;
+        commitOscillators(prev => prev.map((o, idx) => {
+          const angle = list.length <= 1 ? 0 : (idx / list.length) * Math.PI * 2;
+          const updated = {
+            ...o,
+            panX: Number((Math.cos(angle) * spread).toFixed(2)),
+            panY: Number((Math.sin(angle * 2) * spread * 0.5).toFixed(2)),
+            panZ: Number((Math.sin(angle) * spread * 0.8).toFixed(2)),
+          };
+          updateOscillatorNodes(updated, tau);
+          return updated;
+        }));
+        return `Campo espacial 3D ajustado a dispersión ${Math.round(spread * 100)}%.`;
+      }
+
+      case 'launch_transition': {
+        const dur = Math.max(2, Math.min(300, cmd.duration ?? 21));
+        const ratio = cmd.endShiftRatio ?? 1.618;
+        commitOscillators(prev => prev.map(o => ({
+          ...o,
+          transition: {
+            enabled: true,
+            isPlaying: true,
+            duration: dur,
+            loopCount: cmd.loopCount ?? 'infinite',
+            progress: 0,
+            currentLoop: 0,
+            direction: 'forward',
+            start: {
+              frequency: o.frequency,
+              volume: o.volume,
+              panX: o.panX,
+              panY: o.panY,
+              panZ: o.panZ,
+              type: o.type,
+            },
+            end: {
+              frequency: Math.max(0.5, Math.min(20000, Number((o.frequency * ratio).toFixed(2)))),
+              volume: o.volume,
+              panX: -o.panX,
+              panY: o.panY,
+              panZ: -o.panZ,
+              type: o.type2 || 'triangle',
+            },
+          },
+        })));
+        return `Transición evolutiva activada (${dur}s · relación ×${ratio}).`;
+      }
+    }
   };
 
   // --- Transition Loop ---
@@ -603,7 +869,11 @@ export const useAudio = () => {
           return osc;
         });
 
-        return hasChanges ? next : prev;
+        if (hasChanges) {
+          oscillatorsRef.current = next;
+          return next;
+        }
+        return prev;
       });
 
       reqFrameRef.current = requestAnimationFrame(loop);
@@ -647,6 +917,7 @@ export const useAudio = () => {
     });
 
     setOscillators(remoteOscillators);
+    oscillatorsRef.current = remoteOscillators;
   };
 
   const loadPreset = (presetContent: { oscillators: OscillatorState[] }) => {
@@ -670,6 +941,8 @@ export const useAudio = () => {
     setAllOscillators,
     syncFromRemote,
     loadPreset,
+    morphOscillatorsLive,
+    applyLiveAdjustment,
     getMasterAnalyser,
     getCombinedAnalyser,
     getOscillatorAnalyser,

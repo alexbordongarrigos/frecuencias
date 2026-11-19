@@ -79,7 +79,9 @@ const App: React.FC = () => {
   const [activeMedium, setActiveMedium] = useState<RadiationMedium | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOrder, setSortOrder] = useState<SortOption['value']>('hz-asc');
-  const [showFilters, setShowFilters] = useState(true);
+  const [showFilters, setShowFilters] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerWidth >= 768 : true
+  );
   const [viewMode, setViewMode] = useState<ViewMode>('intro');
   const [currentUser, setCurrentUser] = useState<StarseedUser | null>(null);
   const [lang, setLang] = useState<LangCode>(() => {
@@ -348,15 +350,15 @@ const App: React.FC = () => {
         {/* --- Living Solarpunk Liquid Crystal Background (Audio + Mic Morphologic) --- */}
         <LiquidCrystalBackground stateRef={chromaticMorph.stateRef} />
 
-        <div className="relative z-10 max-w-7xl mx-auto px-3 sm:px-5 md:px-6 py-5 sm:py-8">
+        <div className="relative z-10 max-w-7xl mx-auto px-3 sm:px-5 md:px-6 py-3.5 sm:py-6 md:py-8">
           {/* --- Unified Header (StarSeed OS × Omni-Frecuencias) --- */}
-          <header className="relative z-30 text-center mb-8 sm:mb-10 animate-fade-in flex flex-col items-center justify-center">
+          <header className="relative z-30 text-center mb-5 sm:mb-8 animate-fade-in flex flex-col items-center justify-center">
             {/* Top Status, Mic & Ecosystem Bar */}
-            <div className="relative z-40 flex flex-wrap items-center justify-center gap-2 sm:gap-3 mb-5 sm:mb-6">
-              <div className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full morph-pill backdrop-blur-md">
-                <Icon name="Globe" size={14} className="morph-accent-text" />
+            <div className="relative z-40 flex flex-wrap items-center justify-center gap-1.5 sm:gap-2.5 md:gap-3 mb-3.5 sm:mb-5">
+              <div className="inline-flex items-center gap-1.5 sm:gap-2.5 px-2.5 sm:px-4 py-1 sm:py-1.5 rounded-full morph-pill backdrop-blur-md">
+                <Icon name="Globe" size={13} className="morph-accent-text" />
                 <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse"></span>
-                <span className="text-[10px] sm:text-xs font-bold uppercase tracking-[0.22em] text-slate-100">
+                <span className="text-[10px] sm:text-xs font-bold uppercase tracking-[0.16em] sm:tracking-[0.22em] text-slate-100">
                   Omni-Frecuencias v{CURRENT_APP_VERSION}
                 </span>
               </div>
@@ -365,7 +367,7 @@ const App: React.FC = () => {
 
               <button
                 onClick={() => chromaticMorph.toggleMic()}
-                className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${chromaticMorph.micEnabled
+                className={`inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1 sm:py-1.5 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${chromaticMorph.micEnabled
                   ? 'morph-tab-active'
                   : 'morph-btn-glass text-slate-100'
                   }`}
@@ -376,7 +378,7 @@ const App: React.FC = () => {
               >
                 <Icon
                   name={chromaticMorph.micEnabled ? 'Mic' : 'MicOff'}
-                  size={14}
+                  size={13}
                   className={chromaticMorph.micActive ? 'animate-pulse morph-accent-text' : ''}
                 />
                 <span>
@@ -388,21 +390,21 @@ const App: React.FC = () => {
 
               <button
                 onClick={() => setShowDownloadCenter(true)}
-                className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full morph-btn-glass text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-100 cursor-pointer"
+                className="inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1 sm:py-1.5 rounded-full morph-btn-glass text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-100 cursor-pointer"
                 title="Descargar ejecutable nativo multiplataforma"
               >
-                <Icon name="Download" size={14} className="morph-accent-text-2" />
+                <Icon name="Download" size={13} className="morph-accent-text-2" />
                 <span>Sistemas Nativos</span>
               </button>
 
               {currentUser ? (
-                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full morph-pill backdrop-blur-md animate-fade-in">
+                <div className="inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full morph-pill backdrop-blur-md animate-fade-in">
                   <img
                     src="/starseed-symbol.png"
                     alt="StarSeed"
                     className="w-4 h-4 object-contain"
                   />
-                  <span className="text-xs font-bold text-amber-200 max-w-[140px] truncate">
+                  <span className="text-[11px] sm:text-xs font-bold text-amber-200 max-w-[120px] sm:max-w-[140px] truncate">
                     {currentUser.displayName || currentUser.handle || 'StarSeed'}
                   </span>
                   <button
@@ -419,7 +421,7 @@ const App: React.FC = () => {
               ) : (
                 <button
                   onClick={() => setShowLoginModal(true)}
-                  className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full morph-btn-glass text-[10px] sm:text-xs font-bold uppercase tracking-wider text-amber-200 hover:text-white transition-all cursor-pointer"
+                  className="inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1 sm:py-1.5 rounded-full morph-btn-glass text-[10px] sm:text-xs font-bold uppercase tracking-wider text-amber-200 hover:text-white transition-all cursor-pointer"
                   title="Conectar con tu cuenta oficial de StarSeed OS"
                 >
                   <img
@@ -433,19 +435,19 @@ const App: React.FC = () => {
             </div>
 
             {chromaticMorph.micError && (
-              <div className="mb-4 px-3.5 py-1.5 rounded-xl bg-amber-950/80 border border-amber-400/40 text-amber-200 text-xs">
+              <div className="mb-3 px-3.5 py-1.5 rounded-xl bg-amber-950/80 border border-amber-400/40 text-amber-200 text-xs">
                 {chromaticMorph.micError}
               </div>
             )}
 
             {/* Brand Lockup (Pure centered emblem) */}
             <div className="relative inline-flex flex-col items-center">
-              <div className="flex items-center justify-center mb-2.5">
-                <div className="p-2 rounded-3xl art-nouveau-frame">
+              <div className="flex items-center justify-center mb-2">
+                <div className="p-1.5 sm:p-2 rounded-2xl sm:rounded-3xl art-nouveau-frame">
                   <img
                     src="/omnifrecuencias.png"
                     alt="Omni Frecuencias Logo"
-                    className="w-16 h-16 sm:w-20 sm:h-20 object-contain drop-shadow-[0_0_24px_rgba(34,211,238,0.45)]"
+                    className="w-12 h-12 sm:w-16 sm:h-16 md:w-20 md:h-20 object-contain drop-shadow-[0_0_24px_rgba(34,211,238,0.45)]"
                   />
                 </div>
               </div>
@@ -453,7 +455,7 @@ const App: React.FC = () => {
               <h1 className="font-display font-black tracking-tight starseed-text-gradient text-fluid-hero leading-none">
                 Omni-Frecuencias
               </h1>
-              <p className="mt-2 text-[11px] sm:text-xs uppercase tracking-[0.22em] text-slate-300 font-bold">
+              <p className="mt-1.5 sm:mt-2 text-[10px] sm:text-xs uppercase tracking-[0.16em] sm:tracking-[0.22em] text-slate-300 font-bold max-w-2xl px-2">
                 Laboratorio de Síntesis Armónica, Física Ondulatoria y Resonancia Cuántica · <span className="starseed-gold-gradient">StarSeed OS</span>
               </p>
             </div>
@@ -461,7 +463,7 @@ const App: React.FC = () => {
             {/* Main Navigation Tabs (Centered & Balanced on Every Screen) */}
             <nav
               aria-label="Navegación Principal"
-              className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3.5 mt-7 sm:mt-8 w-full max-w-5xl mx-auto"
+              className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3.5 mt-4 sm:mt-7 w-full max-w-5xl mx-auto"
             >
               {[
                 {
@@ -658,24 +660,35 @@ const App: React.FC = () => {
                                 : 'Sincronizar'}
                             </button>
 
-                            {fs.hasLocalGuestData && fs.canWriteCurrentBrain && (
-                              <button
-                                type="button"
-                                onClick={async () => {
-                                  const ok = await fs.importLocalGuestDataToCurrentBrain('merge');
-                                  if (ok) {
-                                    flashLibraryNotice(
-                                      'success',
-                                      `Carpetas locales agregadas al cerebro "${fs.selectedBrain?.name}".`
-                                    );
-                                  }
-                                }}
-                                className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/35 border border-amber-400/45 text-[10px] font-bold uppercase text-amber-200 flex items-center gap-1 cursor-pointer"
-                                title="Agregar carpetas y partículas guardadas localmente antes de iniciar sesión"
-                              >
-                                <Icon name="HardDrive" size={11} />
-                                + Agregar Locales ({fs.localGuestStats.files})
-                              </button>
+                            {fs.showLocalGuestImportPrompt && fs.canWriteCurrentBrain && (
+                              <div className="inline-flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    const ok = await fs.importLocalGuestDataToCurrentBrain('merge');
+                                    if (ok) {
+                                      flashLibraryNotice(
+                                        'success',
+                                        `Carpetas locales agregadas al cerebro "${fs.selectedBrain?.name}".`
+                                      );
+                                    }
+                                  }}
+                                  className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/35 border border-amber-400/45 text-[10px] font-bold uppercase text-amber-200 flex items-center gap-1 cursor-pointer"
+                                  title="Agregar carpetas y partículas guardadas localmente antes de iniciar sesión"
+                                >
+                                  <Icon name="HardDrive" size={11} />
+                                  + Agregar Locales ({fs.localGuestStats.files})
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => fs.dismissLocalGuestImportPrompt()}
+                                  aria-label="Omitir aviso locales"
+                                  title="Omitir este aviso"
+                                  className="p-1 rounded-lg border border-amber-400/25 text-amber-200/70 hover:text-white hover:bg-white/10 cursor-pointer"
+                                >
+                                  <Icon name="X" size={11} />
+                                </button>
+                              </div>
                             )}
                           </div>
                         ) : (
@@ -1016,13 +1029,16 @@ const App: React.FC = () => {
             mode="load"
             fs={fs}
             onClose={() => setShowLibraryExplorer(false)}
-            onFileSelect={(content, mix) => {
+            onFileSelect={(content, mix, sourceNode) => {
               const normalized = normalizeLoadedOscillators(content.oscillators || []);
-              if (mix) {
-                normalized.forEach((osc) => audio.addOscillator(osc));
-              } else {
-                audio.loadPreset({ ...content, oscillators: normalized });
+              if (!mix) {
+                fs.setActiveSourceNode(sourceNode || null);
               }
+              audio.morphOscillatorsLive(normalized, {
+                mode: mix ? 'blend' : 'morph',
+                glideSec: 0.45,
+                autoPlay: true,
+              });
               setShowLibraryExplorer(false);
               setViewMode('generator');
             }}

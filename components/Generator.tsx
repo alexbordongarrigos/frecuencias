@@ -96,6 +96,12 @@ const Generator: React.FC<Props> = ({
   const [expandAllOscillators, setExpandAllOscillators] = useState(false);
   const [showGlobalControls, setShowGlobalControls] = useState(false);
   const [globalVolumeSlider, setGlobalVolumeSlider] = useState(0.5);
+  const [sourceUpdateFeedback, setSourceUpdateFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const isSourceModified = useMemo(
+    () => fs.isSourceModified(oscillators),
+    [fs.activeSourceNode, oscillators]
+  );
 
   const handleAddOscillator = (initialState?: Partial<OscillatorState>) => {
     if (!canEdit) return;
@@ -115,29 +121,34 @@ const Generator: React.FC<Props> = ({
     updateOscillator(id, changes);
   };
 
-  const handleApplyAIPreset = (aiOscillators: Partial<OscillatorState>[]) => {
+  const handleApplyAIPreset = (
+    aiOscillators: Partial<OscillatorState>[],
+    mode: 'morph' | 'blend' = 'morph'
+  ) => {
     if (!canEdit) return;
     history.pushState(oscillators);
-    oscillators.forEach(osc => removeOscillator(osc.id));
-    setTimeout(() => {
-      aiOscillators.forEach(oscParams => {
-        addOscillator(oscParams);
-      });
-    }, 50);
+    audio.morphOscillatorsLive(aiOscillators, {
+      mode,
+      glideSec: 0.7,
+      autoPlay: true,
+    });
   };
 
-  const loadPreset = (preset: PresetContent, mix = false) => {
+  const loadPreset = (
+    preset: PresetContent,
+    mix = false,
+    sourceNode?: import('../types').FileSystemNode
+  ) => {
     if (!canEdit) return;
     history.pushState(oscillators);
     if (!mix) {
-      oscillators.forEach(osc => removeOscillator(osc.id));
+      fs.setActiveSourceNode(sourceNode || null);
     }
-    setTimeout(() => {
-      preset.oscillators.forEach(osc => {
-        const { id: _id, ...props } = osc;
-        addOscillator(props);
-      });
-    }, mix ? 0 : 50);
+    audio.morphOscillatorsLive(preset.oscillators || [], {
+      mode: mix ? 'blend' : 'morph',
+      glideSec: 0.45,
+      autoPlay: true,
+    });
   };
 
   const handleExport = () => {
@@ -212,50 +223,50 @@ const Generator: React.FC<Props> = ({
   return (
     <div className="animate-fade-in space-y-6 pb-24">
       {/* --- Toolbar --- */}
-      <div className="flex flex-col items-center justify-center gap-5 art-nouveau-frame p-4 sm:p-6 rounded-3xl relative">
-        <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 relative z-10 w-full">
+      <div className="flex flex-col items-center justify-center gap-3.5 sm:gap-5 art-nouveau-frame p-3 sm:p-5 md:p-6 rounded-2xl sm:rounded-3xl relative">
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center justify-center gap-2 sm:gap-3.5 relative z-10 w-full">
           <button
             onClick={audio.toggleMasterPlay}
-            className={`group relative flex items-center justify-center w-full sm:w-16 h-14 sm:h-16 rounded-2xl transition-all duration-300 ${
+            className={`col-span-2 sm:col-span-1 group relative flex items-center justify-center w-full sm:w-16 h-12 sm:h-16 rounded-2xl transition-all duration-300 cursor-pointer ${
               audio.isPlaying
                 ? 'morph-btn-primary scale-[1.02]'
                 : 'morph-btn-glass morph-accent-text'
             }`}
             title={audio.isPlaying ? 'Pausar Todo' : 'Reproducir Todo'}
           >
-            <Icon name={audio.isPlaying ? 'Pause' : 'Play'} size={28} className={audio.isPlaying ? '' : 'ml-0.5'} />
-            <span className="sm:hidden ml-2.5 text-xs font-bold uppercase tracking-widest">
+            <Icon name={audio.isPlaying ? 'Pause' : 'Play'} size={24} className={audio.isPlaying ? '' : 'ml-0.5'} />
+            <span className="sm:hidden ml-2 text-xs font-bold uppercase tracking-widest">
               {audio.isPlaying ? 'Pausar Todo' : 'Reproducir Todo'}
             </span>
           </button>
 
           {/* Undo / Redo */}
-          <div className="flex items-center justify-center gap-2 bg-black/50 p-1.5 rounded-2xl border border-white/10">
+          <div className="col-span-2 sm:col-span-1 flex items-center justify-center gap-2 bg-black/50 p-1.5 rounded-2xl border border-white/10">
             <button
               onClick={history.undo}
               disabled={!history.canUndo || !canEdit}
-              className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${
+              className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 sm:py-2.5 rounded-xl text-[11px] sm:text-xs font-bold uppercase tracking-wider transition-all ${
                 history.canUndo && canEdit
-                  ? 'bg-cyan-950/50 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-900/60'
+                  ? 'bg-cyan-950/50 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-900/60 cursor-pointer'
                   : 'text-slate-600 border border-transparent cursor-not-allowed opacity-50'
               }`}
               title="Deshacer (Ctrl+Z / Cmd+Z)"
             >
-              <Icon name="CornerUpLeft" size={15} />
+              <Icon name="CornerUpLeft" size={14} />
               <span>Deshacer</span>
             </button>
 
             <button
               onClick={history.redo}
               disabled={!history.canRedo || !canEdit}
-              className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${
+              className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 sm:py-2.5 rounded-xl text-[11px] sm:text-xs font-bold uppercase tracking-wider transition-all ${
                 history.canRedo && canEdit
-                  ? 'bg-purple-950/50 text-purple-300 border border-purple-500/40 hover:bg-purple-900/60'
+                  ? 'bg-purple-950/50 text-purple-300 border border-purple-500/40 hover:bg-purple-900/60 cursor-pointer'
                   : 'text-slate-600 border border-transparent cursor-not-allowed opacity-50'
               }`}
               title="Rehacer (Ctrl+Y / Cmd+Shift+Z)"
             >
-              <Icon name="CornerUpRight" size={15} />
+              <Icon name="CornerUpRight" size={14} />
               <span>Rehacer</span>
             </button>
           </div>
@@ -263,27 +274,27 @@ const Generator: React.FC<Props> = ({
           <button
             onClick={() => setShowAIModal(true)}
             disabled={!canEdit}
-            className="flex items-center justify-center gap-2.5 px-5 py-3.5 w-full sm:w-auto bg-gradient-to-r from-cyan-950/70 via-purple-950/70 to-pink-950/70 hover:from-cyan-900/80 hover:to-purple-900/80 text-cyan-100 rounded-2xl text-xs sm:text-sm font-bold uppercase tracking-widest transition-all border-2 border-cyan-400/50 shadow-[0_0_25px_rgba(34,211,238,0.25)] disabled:opacity-50 disabled:cursor-not-allowed"
+            className="col-span-2 sm:col-span-1 flex items-center justify-center gap-2 px-3.5 sm:px-5 py-3 sm:py-3.5 w-full sm:w-auto bg-gradient-to-r from-cyan-950/70 via-purple-950/70 to-pink-950/70 hover:from-cyan-900/80 hover:to-purple-900/80 text-cyan-100 rounded-2xl text-xs sm:text-sm font-bold uppercase tracking-wider sm:tracking-widest transition-all border-2 border-cyan-400/50 shadow-[0_0_25px_rgba(34,211,238,0.25)] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
           >
-            <Icon name="Zap" size={18} className="text-cyan-300" />
-            <span className="whitespace-nowrap">Síntesis Asistida IA</span>
+            <Icon name="Sparkles" size={17} className="text-cyan-300 shrink-0" />
+            <span className="whitespace-nowrap">Cronos · Astraura IA</span>
           </button>
 
           <button
             onClick={() => { setExplorerMode('save'); setShowExplorer(true); }}
-            className="flex items-center justify-center gap-2.5 px-5 py-3.5 w-full sm:w-auto bg-cyan-950/40 hover:bg-cyan-900/60 text-cyan-200 rounded-2xl text-xs sm:text-sm font-bold uppercase tracking-widest transition-all border-2 border-cyan-500/30 hover:border-cyan-400/50"
+            className="flex items-center justify-center gap-2 px-3 sm:px-5 py-2.5 sm:py-3.5 w-full sm:w-auto bg-cyan-950/40 hover:bg-cyan-900/60 text-cyan-200 rounded-2xl text-[11px] sm:text-sm font-bold uppercase tracking-wider sm:tracking-widest transition-all border-2 border-cyan-500/30 hover:border-cyan-400/50 cursor-pointer"
           >
-            <Icon name="Save" size={18} />
-            <span className="whitespace-nowrap">Guardar Preset</span>
+            <Icon name="Save" size={16} />
+            <span className="whitespace-nowrap truncate">Guardar Preset</span>
           </button>
 
           <button
             onClick={() => { setExplorerMode('load'); setShowExplorer(true); }}
             disabled={!canEdit}
-            className="flex items-center justify-center gap-2.5 px-5 py-3.5 w-full sm:w-auto bg-purple-950/40 hover:bg-purple-900/60 text-purple-200 rounded-2xl text-xs sm:text-sm font-bold uppercase tracking-widest transition-all border-2 border-purple-500/30 hover:border-purple-400/50 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+            className="flex items-center justify-center gap-2 px-3 sm:px-5 py-2.5 sm:py-3.5 w-full sm:w-auto bg-purple-950/40 hover:bg-purple-900/60 text-purple-200 rounded-2xl text-[11px] sm:text-sm font-bold uppercase tracking-wider sm:tracking-widest transition-all border-2 border-purple-500/30 hover:border-purple-400/50 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
           >
-            <Icon name="Folder" size={18} />
-            <span className="whitespace-nowrap">Cargar Preset</span>
+            <Icon name="Folder" size={16} />
+            <span className="whitespace-nowrap truncate">Cargar Preset</span>
             <span className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/40 border border-white/10 text-[9px] font-mono text-cyan-300 max-w-[140px] truncate">
               {fs.user ? (fs.selectedBrain?.name || 'Cerebro') : (fs.localLocationMeta?.label || 'Local')}
             </span>
@@ -299,14 +310,95 @@ const Generator: React.FC<Props> = ({
                 });
               }
             }}
-            className="flex items-center justify-center gap-2.5 px-5 py-3.5 w-full sm:w-auto bg-red-950/40 hover:bg-red-900/60 text-red-200 rounded-2xl text-xs sm:text-sm font-bold uppercase tracking-widest transition-all border-2 border-red-500/30 hover:border-red-400/50"
+            className="col-span-2 sm:col-span-1 flex items-center justify-center gap-2 px-3.5 sm:px-5 py-2.5 sm:py-3.5 w-full sm:w-auto bg-red-950/40 hover:bg-red-900/60 text-red-200 rounded-2xl text-[11px] sm:text-sm font-bold uppercase tracking-wider sm:tracking-widest transition-all border-2 border-red-500/30 hover:border-red-400/50 cursor-pointer"
           >
-            <Icon name="Radio" size={18} />
+            <Icon name="Radio" size={16} />
             <span className="whitespace-nowrap">Transmitir en Vivo</span>
           </button>
         </div>
 
-        <div className="flex flex-wrap items-center justify-center gap-4 pt-4 border-t border-white/10 w-full max-w-md relative z-10">
+        {/* Active Source File Status & In-Place Folder Update Bar */}
+        {fs.activeSourceNode && (
+          <div className="w-full flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3.5 py-2.5 rounded-2xl bg-black/55 border border-emerald-500/30 relative z-10 text-xs">
+            <div className="flex flex-wrap items-center gap-2 min-w-0">
+              <Icon name="FolderOpen" size={15} className="text-emerald-300 shrink-0" />
+              <span className="text-slate-300 truncate">
+                Archivo origen: <strong className="text-white">{fs.activeSourceNode.folderPath} / {fs.activeSourceNode.name}</strong>
+              </span>
+              {fs.activeSourceNode.brainName && (
+                <span className="px-2 py-0.5 rounded-full bg-purple-500/15 border border-purple-400/30 text-[10px] font-bold text-purple-200">
+                  {fs.activeSourceNode.brainName}
+                </span>
+              )}
+              {isSourceModified && (
+                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/45 text-[10px] font-bold uppercase tracking-wider text-amber-200 animate-pulse">
+                  Modificado
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                disabled={!canEdit || (fs.user ? !fs.canWriteCurrentBrain : false)}
+                onClick={() => {
+                  const res = fs.updateSourceNodeInPlace({
+                    content: {
+                      oscillators,
+                      updatedAt: Date.now(),
+                    },
+                  });
+                  if (res.ok) {
+                    setSourceUpdateFeedback({
+                      type: 'success',
+                      text: `Archivo origen actualizado en "${res.updatedPath}"`,
+                    });
+                  } else {
+                    setSourceUpdateFeedback({
+                      type: 'error',
+                      text: res.error || 'No se pudo actualizar el archivo origen.',
+                    });
+                  }
+                  setTimeout(() => setSourceUpdateFeedback(null), 4000);
+                }}
+                className={`px-3.5 py-1.5 rounded-xl font-bold uppercase tracking-wider text-[10px] border flex items-center gap-1.5 cursor-pointer transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+                  isSourceModified
+                    ? 'bg-emerald-500 text-black border-emerald-300 shadow-[0_0_16px_rgba(16,185,129,0.45)]'
+                    : 'bg-emerald-950/60 hover:bg-emerald-500/30 text-emerald-200 border-emerald-500/40'
+                }`}
+              >
+                <Icon name="Save" size={12} />
+                <span>Actualizar Origen</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => fs.setActiveSourceNode(null)}
+                title="Desvincular archivo origen"
+                aria-label="Desvincular archivo origen"
+                className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-slate-400 hover:text-white cursor-pointer"
+              >
+                <Icon name="X" size={13} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {sourceUpdateFeedback && (
+          <div
+            className={`w-full px-3.5 py-2 rounded-xl border text-xs font-semibold flex items-center justify-between gap-2 relative z-10 ${
+              sourceUpdateFeedback.type === 'success'
+                ? 'bg-emerald-950/75 border-emerald-500/45 text-emerald-200'
+                : 'bg-red-950/75 border-red-500/45 text-red-200'
+            }`}
+          >
+            <span>{sourceUpdateFeedback.text}</span>
+            <button onClick={() => setSourceUpdateFeedback(null)} className="opacity-70 hover:opacity-100 cursor-pointer">
+              <Icon name="X" size={13} />
+            </button>
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center justify-center gap-3 pt-3 border-t border-white/10 w-full max-w-md relative z-10">
           <button
             onClick={handleExport}
             className="flex items-center gap-2 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400 hover:text-cyan-300 hover:bg-cyan-500/10 rounded-xl transition-colors border border-white/5"
@@ -329,7 +421,12 @@ const Generator: React.FC<Props> = ({
       {showAIModal && (
         <AIGeneratorModal
           onClose={() => setShowAIModal(false)}
-          onApplyPreset={handleApplyAIPreset}
+          onApplyPreset={(oscs, mode) => handleApplyAIPreset(oscs, mode)}
+          audio={audio}
+          fs={fs}
+          activeVizTab={activeVizTab}
+          onVizTabChange={onVizTabChange}
+          canEdit={canEdit}
         />
       )}
 

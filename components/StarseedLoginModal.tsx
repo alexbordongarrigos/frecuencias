@@ -77,7 +77,7 @@ export const StarseedLoginModal: React.FC<StarseedLoginModalProps> = ({
       }}
     >
       <div 
-        className="relative w-full max-w-md bg-slate-950/95 border border-amber-500/30 rounded-3xl p-6 sm:p-8 shadow-[0_0_60px_rgba(245,158,11,0.25)] backdrop-blur-2xl text-white overflow-hidden"
+        className="relative w-full max-w-md max-h-[92dvh] overflow-y-auto custom-scrollbar bg-slate-950/95 border border-amber-500/30 rounded-2xl sm:rounded-3xl p-4 sm:p-8 shadow-[0_0_60px_rgba(245,158,11,0.25)] backdrop-blur-2xl text-white"
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-starseed-title"

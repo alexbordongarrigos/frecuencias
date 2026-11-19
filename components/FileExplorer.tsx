@@ -24,7 +24,7 @@ import AdaptiveParticleGrid from './AdaptiveParticleGrid';
 
 interface Props {
   mode: 'save' | 'load';
-  onFileSelect: (content: PresetContent, mix?: boolean) => void;
+  onFileSelect: (content: PresetContent, mix?: boolean, sourceNode?: FileSystemNode) => void;
   onClose: () => void;
   fs: ReturnType<typeof useFileSystem>;
   currentConfig?: PresetContent;
@@ -77,6 +77,9 @@ const FileExplorer: React.FC<Props> = ({ mode, onFileSelect, onClose, fs, curren
   const [newBrainName, setNewBrainName] = useState('');
   const [newBrainDesc, setNewBrainDesc] = useState('');
   const [creatingBrain, setCreatingBrain] = useState(false);
+  const [mobileSyncOpen, setMobileSyncOpen] = useState(false);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [mobileSaveDetailsOpen, setMobileSaveDetailsOpen] = useState(false);
 
   useEffect(() => {
     setCurrentFolderId('root');
@@ -500,7 +503,8 @@ const FileExplorer: React.FC<Props> = ({ mode, onFileSelect, onClose, fs, curren
         onClick={() => setSelectedId(node.id)}
         onDoubleClick={() => {
           if (node.content && mode === 'load') {
-            onFileSelect(node.content, false);
+            fs.setActiveSourceNode(node);
+            onFileSelect(node.content, false, node);
             onClose();
           }
         }}
@@ -723,7 +727,7 @@ const FileExplorer: React.FC<Props> = ({ mode, onFileSelect, onClose, fs, curren
               <button
                 type="button"
                 onClick={() => {
-                  onFileSelect(node.content!, true);
+                  onFileSelect(node.content!, true, node);
                   onClose();
                 }}
                 className="px-2.5 py-1.5 rounded-lg bg-purple-500/20 hover:bg-purple-500/40 text-purple-200 border border-purple-500/30 text-[10px] font-bold cursor-pointer"
@@ -733,7 +737,8 @@ const FileExplorer: React.FC<Props> = ({ mode, onFileSelect, onClose, fs, curren
               <button
                 type="button"
                 onClick={() => {
-                  onFileSelect(node.content!, false);
+                  fs.setActiveSourceNode(node);
+                  onFileSelect(node.content!, false, node);
                   onClose();
                 }}
                 className="px-2.5 py-1.5 rounded-lg bg-cyan-500/25 hover:bg-cyan-500 text-cyan-100 hover:text-black border border-cyan-500/40 text-[10px] font-bold cursor-pointer"
@@ -748,27 +753,27 @@ const FileExplorer: React.FC<Props> = ({ mode, onFileSelect, onClose, fs, curren
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/90 backdrop-blur-xl p-2 sm:p-5 animate-fade-in">
-      <div className="w-full max-w-6xl bg-[#060913]/95 border border-cyan-500/25 rounded-3xl shadow-[0_0_60px_rgba(0,0,0,0.95),inset_0_0_30px_rgba(34,211,238,0.06)] flex flex-col max-h-[94vh] sm:h-[90vh] overflow-hidden relative backdrop-blur-2xl">
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/90 backdrop-blur-xl p-0 sm:p-4 md:p-5 animate-fade-in">
+      <div className="w-full max-w-6xl bg-[#060913]/95 border border-cyan-500/25 rounded-none sm:rounded-3xl shadow-[0_0_60px_rgba(0,0,0,0.95),inset_0_0_30px_rgba(34,211,238,0.06)] flex flex-col h-[100dvh] sm:h-[90dvh] max-h-[100dvh] sm:max-h-[90dvh] overflow-hidden relative backdrop-blur-2xl">
         <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/8 via-purple-500/5 to-pink-500/8 pointer-events-none" />
 
         {/* Header */}
-        <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-white/10 bg-black/50 relative z-10 shrink-0 gap-3">
-          <div className="flex items-center gap-3 min-w-0">
+        <div className="flex items-center justify-between px-3 sm:px-6 py-2.5 sm:py-4 border-b border-white/10 bg-black/50 relative z-10 shrink-0 gap-2 sm:gap-3">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <div
-              className={`p-2.5 sm:p-3 rounded-2xl border shrink-0 ${
+              className={`p-2 sm:p-3 rounded-xl sm:rounded-2xl border shrink-0 ${
                 mode === 'save'
                   ? 'bg-cyan-950/50 border-cyan-500/40 text-cyan-300'
                   : 'bg-purple-950/50 border-purple-500/40 text-purple-300'
               }`}
             >
-              <Icon name={mode === 'save' ? 'Save' : 'Folder'} size={22} />
+              <Icon name={mode === 'save' ? 'Save' : 'Folder'} size={18} />
             </div>
             <div className="min-w-0">
-              <h2 className="text-lg sm:text-2xl font-display font-black text-white truncate">
+              <h2 className="text-base sm:text-2xl font-display font-black text-white truncate">
                 {mode === 'save' ? 'Guardar Partícula Personal' : 'Explorador de Partículas y Carpetas'}
               </h2>
-              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-cyan-200/60">
+              <p className="hidden sm:block text-[10px] font-bold uppercase tracking-[0.22em] text-cyan-200/60">
                 Archivo Cuántico Local & Sincronía StarSeed OS
               </p>
             </div>
@@ -780,12 +785,67 @@ const FileExplorer: React.FC<Props> = ({ mode, onFileSelect, onClose, fs, curren
             title="Cerrar explorador"
             className="p-2 hover:bg-white/10 rounded-full transition-colors text-slate-400 hover:text-white cursor-pointer shrink-0"
           >
-            <Icon name="X" size={22} />
+            <Icon name="X" size={20} />
           </button>
         </div>
 
+        {/* Mobile Compact Quick Control Strip (maximizes folder/file browsing viewport on smartphones) */}
+        <div className="md:hidden flex items-center justify-between gap-1.5 px-3 py-2 border-b border-white/10 bg-[#080e1d]/95 relative z-10 shrink-0">
+          <button
+            type="button"
+            onClick={() => {
+              setMobileSyncOpen((v) => !v);
+              if (mobileFiltersOpen) setMobileFiltersOpen(false);
+            }}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[10px] font-bold truncate max-w-[46%] cursor-pointer ${
+              mobileSyncOpen
+                ? 'bg-purple-500/20 border-purple-400/45 text-purple-100'
+                : 'bg-black/60 border-white/15 text-slate-200'
+            }`}
+          >
+            <Icon name={fs.user ? 'Brain' : 'HardDrive'} size={12} className={fs.user ? 'text-purple-300 shrink-0' : 'text-cyan-300 shrink-0'} />
+            <span className="truncate">
+              {fs.user ? (fs.selectedBrain?.name || 'Cerebro') : (fs.localLocationMeta?.label || 'Local')}
+            </span>
+            <Icon name={mobileSyncOpen ? 'ChevronUp' : 'ChevronDown'} size={11} className="shrink-0" />
+          </button>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                setMobileFiltersOpen((v) => !v);
+                if (mobileSyncOpen) setMobileSyncOpen(false);
+              }}
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-[10px] font-bold uppercase cursor-pointer ${
+                mobileFiltersOpen
+                  ? 'bg-cyan-500/20 border-cyan-400/45 text-cyan-200'
+                  : 'bg-white/5 border-white/15 text-slate-300'
+              }`}
+            >
+              <Icon name="Search" size={11} />
+              <span>Filtros</span>
+            </button>
+
+            {!isCreatingFolder && (
+              <button
+                type="button"
+                onClick={() => setIsCreatingFolder(true)}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-cyan-950/50 border border-cyan-500/35 text-[10px] font-bold uppercase text-cyan-200 cursor-pointer"
+              >
+                <Icon name="Plus" size={11} />
+                <span>Carpeta</span>
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* StarSeed OS Brain & Storage Synchronization Bar */}
-        <div className="px-4 sm:px-6 py-2.5 border-b border-white/10 bg-[#080e1d]/90 relative z-10 shrink-0 space-y-2">
+        <div
+          className={`${
+            mobileSyncOpen ? 'block' : 'hidden md:block'
+          } px-3 sm:px-6 py-2.5 border-b border-white/10 bg-[#080e1d]/90 relative z-10 shrink-0 space-y-2 max-h-[34dvh] md:max-h-none overflow-y-auto`}
+        >
           <div className="flex flex-wrap items-center justify-between gap-2">
             {fs.user ? (
               <div className="flex flex-wrap items-center gap-2 min-w-0">
@@ -1024,34 +1084,76 @@ const FileExplorer: React.FC<Props> = ({ mode, onFileSelect, onClose, fs, curren
           )}
 
           {/* Explicit Import Banner for Previously Saved Local Device Folders/Particles */}
-          {fs.user && fs.hasLocalGuestData && fs.canWriteCurrentBrain && (
+          {fs.user && fs.showLocalGuestImportPrompt && fs.canWriteCurrentBrain && (
             <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-3 py-2 rounded-xl bg-amber-950/40 border border-amber-500/35 text-[11px] text-amber-100">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 min-w-0">
                 <Icon name="HardDrive" size={14} className="text-amber-300 shrink-0" />
-                <span>
-                  Tu biblioteca del cerebro se abrió aislada/vacía. Tienes{' '}
+                <span className="leading-snug">
+                  Se detectaron{' '}
                   <strong>{fs.localGuestStats.folders} carpetas</strong> y{' '}
-                  <strong>{fs.localGuestStats.files} partículas</strong> guardadas localmente en este dispositivo.
+                  <strong>{fs.localGuestStats.files} partículas</strong> locales guardadas previamente en este dispositivo.
                 </span>
               </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const ok = await fs.importLocalGuestDataToCurrentBrain('merge');
+                    if (ok) {
+                      notify(
+                        'success',
+                        `Carpetas y partículas locales agregadas al cerebro "${fs.selectedBrain?.name || 'actual'}".`
+                      );
+                    }
+                  }}
+                  className="px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-[10px] uppercase tracking-wider cursor-pointer"
+                >
+                  + Agregar Locales a este Cerebro
+                </button>
+                <button
+                  type="button"
+                  onClick={() => fs.dismissLocalGuestImportPrompt()}
+                  aria-label="Omitir importación local"
+                  title="Omitir por ahora"
+                  className="px-2 py-1 rounded-lg border border-amber-400/30 text-amber-200/80 hover:text-white hover:bg-white/10 text-[10px] font-bold uppercase cursor-pointer"
+                >
+                  Omitir
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Persistent Compact Import Reminder Outside Mobile Sync Drawer when unacknowledged */}
+        {!mobileSyncOpen && fs.user && fs.showLocalGuestImportPrompt && fs.canWriteCurrentBrain && (
+          <div className="md:hidden mx-3 mt-2 px-2.5 py-2 rounded-xl bg-amber-950/45 border border-amber-500/35 text-[11px] text-amber-100 flex items-center justify-between gap-2 shrink-0 relative z-10">
+            <span className="truncate">
+              <strong>{fs.localGuestStats.folders}</strong> carp. / <strong>{fs.localGuestStats.files}</strong> part. locales sin vincular
+            </span>
+            <div className="flex items-center gap-1 shrink-0">
               <button
                 type="button"
                 onClick={async () => {
                   const ok = await fs.importLocalGuestDataToCurrentBrain('merge');
                   if (ok) {
-                    notify(
-                      'success',
-                      `Carpetas y partículas locales agregadas al cerebro "${fs.selectedBrain?.name || 'actual'}".`
-                    );
+                    notify('success', `Carpetas locales agregadas al cerebro "${fs.selectedBrain?.name || 'actual'}".`);
                   }
                 }}
-                className="px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-[10px] uppercase tracking-wider shrink-0 cursor-pointer"
+                className="px-2.5 py-1 rounded-lg bg-amber-500 text-black font-bold text-[10px] uppercase cursor-pointer"
               >
-                + Agregar Locales a este Cerebro
+                + Agregar
+              </button>
+              <button
+                type="button"
+                onClick={() => fs.dismissLocalGuestImportPrompt()}
+                aria-label="Cerrar aviso local"
+                className="p-1 text-amber-200/70 hover:text-white cursor-pointer"
+              >
+                <Icon name="X" size={13} />
               </button>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Status Toast */}
         {statusMessage && (
@@ -1073,9 +1175,9 @@ const FileExplorer: React.FC<Props> = ({ mode, onFileSelect, onClose, fs, curren
         )}
 
         {/* Toolbar: Breadcrumbs & Top Actions */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 px-4 sm:px-6 py-3 bg-black/40 border-b border-white/10 relative z-10 shrink-0">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2 sm:gap-3 px-3 sm:px-6 py-2 sm:py-3 bg-black/40 border-b border-white/10 relative z-10 shrink-0">
           {/* Interactive Breadcrumbs */}
-          <div className="flex items-center gap-1.5 text-xs sm:text-sm overflow-x-auto no-scrollbar py-1">
+          <div className="flex items-center gap-1.5 text-xs sm:text-sm overflow-x-auto no-scrollbar py-0.5">
             {breadcrumbs.map((crumb, idx, arr) => (
               <div key={crumb.id} className="flex items-center gap-1.5 shrink-0">
                 <button
@@ -1084,7 +1186,7 @@ const FileExplorer: React.FC<Props> = ({ mode, onFileSelect, onClose, fs, curren
                     setCurrentFolderId(crumb.id);
                     setSearchGlobalTree(false);
                   }}
-                  className={`px-2.5 py-1 rounded-lg transition-colors font-semibold cursor-pointer ${
+                  className={`px-2 sm:px-2.5 py-1 rounded-lg transition-colors font-semibold cursor-pointer ${
                     idx === arr.length - 1
                       ? 'bg-cyan-500/15 text-cyan-200 border border-cyan-500/30'
                       : 'text-slate-400 hover:text-white hover:bg-white/5'
@@ -1098,7 +1200,7 @@ const FileExplorer: React.FC<Props> = ({ mode, onFileSelect, onClose, fs, curren
           </div>
 
           {/* Search, Category, View & Actions */}
-          <div className="flex flex-wrap items-center gap-2">
+          <div className={`${mobileFiltersOpen ? 'flex' : 'hidden md:flex'} flex-wrap items-center gap-2`}>
             {/* Search Input */}
             <div className="relative flex-1 sm:flex-none sm:w-52">
               <Icon name="Search" size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
@@ -1216,7 +1318,7 @@ const FileExplorer: React.FC<Props> = ({ mode, onFileSelect, onClose, fs, curren
         )}
 
         {/* Content Area */}
-        <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 custom-scrollbar relative z-0">
+        <div className="flex-1 min-h-[240px] overflow-y-auto p-3 sm:p-6 custom-scrollbar relative z-0">
           {displayedItems.length === 0 ? (
             <div className="h-full min-h-[180px] flex flex-col items-center justify-center text-slate-500 text-center py-8">
               <div className="p-5 rounded-full bg-white/5 border border-white/10 mb-4">
@@ -1247,28 +1349,73 @@ const FileExplorer: React.FC<Props> = ({ mode, onFileSelect, onClose, fs, curren
         </div>
 
         {/* Footer */}
-        <div className="p-4 sm:p-5 border-t border-white/10 bg-black/70 backdrop-blur-xl relative z-10 shrink-0 max-h-[48vh] overflow-y-auto custom-scrollbar">
+        <div className="p-3 sm:p-5 border-t border-white/10 bg-black/75 backdrop-blur-xl relative z-10 shrink-0 max-h-[42dvh] sm:max-h-[48dvh] overflow-y-auto custom-scrollbar">
           {mode === 'save' ? (
-            <div className="flex flex-col gap-3">
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-                <div className="md:col-span-4 relative">
-                  <input
-                    type="text"
-                    placeholder="Nombre de la partícula..."
-                    value={saveFileName}
-                    onChange={e => setSaveFileName(e.target.value)}
-                    className="w-full bg-black/60 border border-cyan-500/40 rounded-xl pl-3.5 pr-14 py-2.5 text-sm text-white focus:border-cyan-400 focus:outline-none placeholder:text-slate-500"
-                  />
-                  <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-cyan-500/60 text-xs font-mono font-bold">
-                    .omni
-                  </span>
+            <div className="flex flex-col gap-2.5 sm:gap-3">
+              {/* Source File In-Place Update Banner when opened from Explorer */}
+              {fs.activeSourceNode && (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3 py-2 rounded-xl bg-emerald-950/40 border border-emerald-500/35 text-xs">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Icon name="FileAudio" size={14} className="text-emerald-300 shrink-0" />
+                    <span className="text-emerald-100 truncate">
+                      Archivo origen: <strong>{fs.activeSourceNode.folderPath} / {fs.activeSourceNode.name}</strong>
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={fs.user ? !fs.canWriteCurrentBrain : false}
+                    onClick={() => {
+                      const res = fs.updateSourceNodeInPlace({
+                        name: saveFileName.trim() || fs.activeSourceNode?.name,
+                        content: {
+                          ...(currentConfig || { oscillators: [], dateCreated: Date.now() }),
+                          category: saveFileCategory,
+                          description: saveFileDescription || undefined,
+                          technicalRecommendation: saveTechRec,
+                        },
+                      });
+                      if (res.ok) {
+                        notify('success', `Archivo origen actualizado en "${res.updatedPath}".`);
+                        onClose();
+                      } else {
+                        notify('error', res.error || 'No se pudo actualizar el archivo origen.');
+                      }
+                    }}
+                    className="px-3.5 py-1.5 rounded-lg bg-emerald-500/25 hover:bg-emerald-500 text-emerald-100 hover:text-black border border-emerald-400/50 text-[10px] font-bold uppercase tracking-wider shrink-0 cursor-pointer disabled:opacity-40"
+                  >
+                    Actualizar Archivo Origen
+                  </button>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 sm:gap-3">
+                <div className="md:col-span-4 flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      type="text"
+                      placeholder="Nombre de la partícula..."
+                      value={saveFileName}
+                      onChange={e => setSaveFileName(e.target.value)}
+                      className="w-full bg-black/60 border border-cyan-500/40 rounded-xl pl-3.5 pr-12 py-2 sm:py-2.5 text-sm text-white focus:border-cyan-400 focus:outline-none placeholder:text-slate-500"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-cyan-500/60 text-[11px] font-mono font-bold">
+                      .omni
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setMobileSaveDetailsOpen(v => !v)}
+                    className="md:hidden px-2.5 py-2 rounded-xl bg-white/5 border border-white/15 text-[10px] font-bold uppercase text-slate-300 shrink-0 cursor-pointer"
+                  >
+                    {mobileSaveDetailsOpen ? 'Menos' : 'Detalles'}
+                  </button>
                 </div>
 
-                <div className="md:col-span-4">
+                <div className={`${mobileSaveDetailsOpen ? 'block' : 'hidden md:block'} md:col-span-4`}>
                   <select
                     value={saveFileCategory}
                     onChange={e => setSaveFileCategory(e.target.value)}
-                    className="w-full bg-black/60 border border-cyan-500/30 rounded-xl px-3 py-2.5 text-xs text-white focus:border-cyan-400 focus:outline-none"
+                    className="w-full bg-black/60 border border-cyan-500/30 rounded-xl px-3 py-2 sm:py-2.5 text-xs text-white focus:border-cyan-400 focus:outline-none"
                   >
                     {EDITABLE_CATEGORIES.map(cat => (
                       <option key={cat.id} value={cat.id} className="bg-slate-900">
@@ -1278,19 +1425,19 @@ const FileExplorer: React.FC<Props> = ({ mode, onFileSelect, onClose, fs, curren
                   </select>
                 </div>
 
-                <div className="md:col-span-4">
+                <div className={`${mobileSaveDetailsOpen ? 'block' : 'hidden md:block'} md:col-span-4`}>
                   <input
                     type="text"
                     placeholder="Breve descripción o propósito..."
                     value={saveFileDescription}
                     onChange={e => setSaveFileDescription(e.target.value)}
-                    className="w-full bg-black/60 border border-cyan-500/30 rounded-xl px-3.5 py-2.5 text-xs text-white focus:border-cyan-400 focus:outline-none placeholder:text-slate-500"
+                    className="w-full bg-black/60 border border-cyan-500/30 rounded-xl px-3.5 py-2 sm:py-2.5 text-xs text-white focus:border-cyan-400 focus:outline-none placeholder:text-slate-500"
                   />
                 </div>
               </div>
 
               {/* Optional Collapsible Technical Recommendations in Save Mode */}
-              <div className="rounded-2xl border border-white/10 bg-black/40 overflow-hidden">
+              <div className={`${mobileSaveDetailsOpen ? 'block' : 'hidden md:block'} rounded-2xl border border-white/10 bg-black/40 overflow-hidden`}>
                 <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5">
                   <button
                     type="button"
@@ -1445,7 +1592,7 @@ const FileExplorer: React.FC<Props> = ({ mode, onFileSelect, onClose, fs, curren
                   type="button"
                   onClick={() => {
                     if (selectedNode?.type === 'file' && selectedNode.content) {
-                      onFileSelect(selectedNode.content, true);
+                      onFileSelect(selectedNode.content, true, selectedNode);
                       onClose();
                     }
                   }}
@@ -1458,7 +1605,8 @@ const FileExplorer: React.FC<Props> = ({ mode, onFileSelect, onClose, fs, curren
                   type="button"
                   onClick={() => {
                     if (selectedNode?.type === 'file' && selectedNode.content) {
-                      onFileSelect(selectedNode.content, false);
+                      fs.setActiveSourceNode(selectedNode);
+                      onFileSelect(selectedNode.content, false, selectedNode);
                       onClose();
                     }
                   }}
